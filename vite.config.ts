@@ -5,8 +5,8 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   define: {
-    // Specifically shim process.env.API_KEY for the Gemini SDK
-    // This allows the SDK to access the key as if it were in a Node environment
+    // Ensures process.env.API_KEY is replaced with the actual key at build time
+    // Important: The environment variable MUST be set in your deployment platform (Vercel/Netlify)
     'process.env.API_KEY': JSON.stringify(process.env.API_KEY || '')
   },
   server: {

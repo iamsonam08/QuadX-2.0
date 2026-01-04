@@ -8,6 +8,7 @@ const generateId = () => Math.random().toString(36).substr(2, 9);
  * Provides concise, accurate campus information based on uploaded data.
  */
 export async function askVPai(question: string, context: AppData) {
+  // Always create a new instance inside the function to ensure the correct API key is used
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   try {
     const response = await ai.models.generateContent({
@@ -20,24 +21,19 @@ export async function askVPai(question: string, context: AppData) {
         ${JSON.stringify(context)}
 
         OPERATIONAL PROTOCOLS:
-        1. BE CONCISE: Limit responses to 1-2 sentences. Use emojis sparingly (max 1 per response).
-        2. BE ACCURATE: Use the KNOWLEDGE BASE strictly for college-specific answers (Timetable, Exams, Scholarships, etc.).
-        3. SOCIAL CHAT: If the user greets you or makes small talk, respond in a friendly, student-like manner.
-        4. NO REPETITION: Do not repeat the user's query or use robotic filler phrases like "I understand you are asking about...".
-        5. DIRECTNESS: Jump straight to the information requested.
-        6. MISSING INFO: If the requested data is not in the KNOWLEDGE BASE, state: "I don't have that info yet! Check back later. 📚"
-        7. ACCESSIBILITY: Use simple language. Branches: Comp, IT, Civil, Mech, Elect, AIDS, E&TC.`,
+        1. BE CONCISE: Limit responses to 1-2 sentences. Use emojis sparingly.
+        2. BE ACCURATE: Use the KNOWLEDGE BASE strictly for college-specific answers.
+        3. SOCIAL CHAT: If the user greets you or makes small talk, respond in a friendly student manner.
+        4. DIRECTNESS: Jump straight to the information requested.
+        5. MISSING INFO: If data is missing, say: "I don't have that info yet! Check back later. 📚"`,
         temperature: 0.4,
-        thinkingConfig: { 
-          thinkingBudget: 1024 
-        }
       }
     });
 
     return response.text?.trim() || "I'm not sure how to answer that. Could you try rephrasing? 🤔";
   } catch (error) {
     console.error("VPai Connection Error:", error);
-    return "I'm having a connection hiccup. Let's try again! ⚡";
+    return "I'm having a connection hiccup. Please check if your API key is correctly set in the environment variables! ⚡";
   }
 }
 
@@ -47,10 +43,10 @@ const CATEGORY_SCHEMAS: Record<string, any> = {
     items: {
       type: Type.OBJECT,
       properties: {
-        day: { type: Type.STRING, description: "Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, or Sunday" },
-        branch: { type: Type.STRING, description: "Comp, IT, Civil, Mech, Elect, AIDS, or E&TC" },
-        year: { type: Type.STRING, description: "1st Year, 2nd Year, 3rd Year, or 4th Year" },
-        division: { type: Type.STRING, description: "A or B" },
+        day: { type: Type.STRING },
+        branch: { type: Type.STRING },
+        year: { type: Type.STRING },
+        division: { type: Type.STRING },
         slots: {
           type: Type.ARRAY,
           items: {
@@ -76,7 +72,7 @@ const CATEGORY_SCHEMAS: Record<string, any> = {
         amount: { type: Type.STRING },
         deadline: { type: Type.STRING },
         eligibility: { type: Type.STRING },
-        category: { type: Type.STRING, description: "GIRLS or GENERAL" }
+        category: { type: Type.STRING }
       },
       required: ["name", "amount", "deadline", "eligibility", "category"]
     }
@@ -90,7 +86,7 @@ const CATEGORY_SCHEMAS: Record<string, any> = {
         date: { type: Type.STRING },
         venue: { type: Type.STRING },
         description: { type: Type.STRING },
-        category: { type: Type.STRING, description: "Comp, IT, Civil, Mech, Elect, AIDS, E&TC, or General" }
+        category: { type: Type.STRING }
       },
       required: ["title", "date", "venue", "description", "category"]
     }
@@ -104,9 +100,9 @@ const CATEGORY_SCHEMAS: Record<string, any> = {
         date: { type: Type.STRING },
         time: { type: Type.STRING },
         venue: { type: Type.STRING },
-        branch: { type: Type.STRING, description: "Comp, IT, Civil, Mech, Elect, AIDS, or E&TC" },
-        year: { type: Type.STRING, description: "1st Year, 2nd Year, 3rd Year, or 4th Year" },
-        division: { type: Type.STRING, description: "A or B" }
+        branch: { type: Type.STRING },
+        year: { type: Type.STRING },
+        division: { type: Type.STRING }
       },
       required: ["subject", "date", "time", "venue", "branch", "year", "division"]
     }
@@ -120,41 +116,35 @@ const CATEGORY_SCHEMAS: Record<string, any> = {
         role: { type: Type.STRING },
         location: { type: Type.STRING },
         stipend: { type: Type.STRING },
-        branch: { type: Type.STRING, description: "Comp, IT, Civil, Mech, Elect, AIDS, or E&TC" },
-        year: { type: Type.STRING, description: "1st Year, 2nd Year, 3rd Year, or 4th Year" }
+        branch: { type: Type.STRING },
+        year: { type: Type.STRING }
       },
       required: ["company", "role", "location", "stipend", "branch", "year"]
-    }
-  },
-  'CAMPUS_MAP': {
-    type: Type.ARRAY,
-    items: {
-      type: Type.OBJECT,
-      properties: {
-        title: { type: Type.STRING },
-        description: { type: Type.STRING }
-      },
-      required: ["title", "description"]
     }
   }
 };
 
 /**
  * AI Content Extraction
- * Parses unstructured text, JSON-tables (from Excel/CSV), images, or PDF documents.
  */
 export async function extractCategoryData(category: string, content: string, mimeType: string = "text/plain") {
+  if (!process.env.API_KEY) {
+    console.error("API_KEY is missing from environment variables.");
+    return [];
+  }
+
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const schema = CATEGORY_SCHEMAS[category];
-  const parts: any[] = [{ text: `Task: Extract structured JSON data for ${category} from the provided document input.
-  Return an ARRAY of objects matching the schema.
   
-  RULES:
-  1. If input is a spreadsheet (JSON array of rows), map columns to the schema fields accurately.
-  2. Branch names MUST be: Comp, IT, Civil, Mech, Elect, AIDS, E&TC. 
-  3. Year levels MUST be: 1st Year, 2nd Year, 3rd Year, 4th Year.
-  4. For timetables, support all 7 days of the week.
-  5. DO NOT include any text outside the JSON array. Output ONLY valid JSON.` }];
+  if (!schema) {
+    console.error(`No schema defined for category: ${category}`);
+    return [];
+  }
+
+  const parts: any[] = [{ text: `Task: Extract structured JSON data for ${category} from the provided input. 
+  Output ONLY a valid JSON array. No conversational text.
+  Branch names: Comp, IT, Civil, Mech, Elect, AIDS, E&TC.
+  Years: 1st Year, 2nd Year, 3rd Year, 4th Year.` }];
 
   if (mimeType.startsWith('image/') || mimeType === 'application/pdf') {
     parts.push({
@@ -178,11 +168,10 @@ export async function extractCategoryData(category: string, content: string, mim
     });
 
     let rawText = response.text || '[]';
-    // Clean potential markdown formatting
+    // Deep clean Markdown if responseMimeType wasn't strictly followed
     const sanitizedText = rawText.replace(/```json\n?|```/g, '').trim();
     const parsed = JSON.parse(sanitizedText);
     
-    // Normalize with unique IDs
     return parsed.map((item: any) => ({
       ...item,
       id: generateId(),
