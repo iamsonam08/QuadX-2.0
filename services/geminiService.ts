@@ -1,14 +1,24 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { AppData } from "../types";
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
 /**
+ * Check if the API Key is available
+ */
+export function isApiKeyConfigured(): boolean {
+  return !!process.env.API_KEY && process.env.API_KEY !== '';
+}
+
+/**
  * VPai Chat Assistant
- * Provides concise, accurate campus information based on uploaded data.
  */
 export async function askVPai(question: string, context: AppData) {
-  // Always create a new instance inside the function to ensure the correct API key is used
+  if (!isApiKeyConfigured()) {
+    return "API Key is not configured in your deployment environment variables! 🔑";
+  }
+
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   try {
     const response = await ai.models.generateContent({
@@ -16,24 +26,16 @@ export async function askVPai(question: string, context: AppData) {
       contents: [{ parts: [{ text: question }] }],
       config: {
         systemInstruction: `You are VPai, the official AI assistant for QuadX College. 
-
-        KNOWLEDGE BASE:
-        ${JSON.stringify(context)}
-
-        OPERATIONAL PROTOCOLS:
-        1. BE CONCISE: Limit responses to 1-2 sentences. Use emojis sparingly.
-        2. BE ACCURATE: Use the KNOWLEDGE BASE strictly for college-specific answers.
-        3. SOCIAL CHAT: If the user greets you or makes small talk, respond in a friendly student manner.
-        4. DIRECTNESS: Jump straight to the information requested.
-        5. MISSING INFO: If data is missing, say: "I don't have that info yet! Check back later. 📚"`,
+        KNOWLEDGE BASE: ${JSON.stringify(context)}
+        RULES: Be concise (1-2 sentences). Use the base strictly. If info is missing, say "I don't have that info yet! 📚"`,
         temperature: 0.4,
       }
     });
 
-    return response.text?.trim() || "I'm not sure how to answer that. Could you try rephrasing? 🤔";
+    return response.text?.trim() || "I'm thinking... but nothing came out. Try again? 🤔";
   } catch (error) {
     console.error("VPai Connection Error:", error);
-    return "I'm having a connection hiccup. Please check if your API key is correctly set in the environment variables! ⚡";
+    return "I'm having a connection hiccup. Check your API key and internet! ⚡";
   }
 }
 
@@ -128,20 +130,17 @@ const CATEGORY_SCHEMAS: Record<string, any> = {
  * AI Content Extraction
  */
 export async function extractCategoryData(category: string, content: string, mimeType: string = "text/plain") {
-  if (!process.env.API_KEY) {
-    console.error("API_KEY is missing from environment variables.");
+  if (!isApiKeyConfigured()) {
+    console.error("CRITICAL: API_KEY is missing from environment variables.");
     return [];
   }
 
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const schema = CATEGORY_SCHEMAS[category];
   
-  if (!schema) {
-    console.error(`No schema defined for category: ${category}`);
-    return [];
-  }
+  if (!schema) return [];
 
-  const parts: any[] = [{ text: `Task: Extract structured JSON data for ${category} from the provided input. 
+  const parts: any[] = [{ text: `Task: Extract structured JSON data for ${category} from input. 
   Output ONLY a valid JSON array. No conversational text.
   Branch names: Comp, IT, Civil, Mech, Elect, AIDS, E&TC.
   Years: 1st Year, 2nd Year, 3rd Year, 4th Year.` }];
@@ -168,10 +167,12 @@ export async function extractCategoryData(category: string, content: string, mim
     });
 
     let rawText = response.text || '[]';
-    // Deep clean Markdown if responseMimeType wasn't strictly followed
+    // Deep clean Markdown
     const sanitizedText = rawText.replace(/```json\n?|```/g, '').trim();
     const parsed = JSON.parse(sanitizedText);
     
+    if (!Array.isArray(parsed)) return [];
+
     return parsed.map((item: any) => ({
       ...item,
       id: generateId(),
@@ -181,8 +182,4 @@ export async function extractCategoryData(category: string, content: string, mim
     console.error("AI Extraction Error:", error);
     return [];
   }
-}
-
-export async function processAdminUpload(content: string, fileName: string = "Manual Entry", mimeType: string = "text/plain") {
-  return []; 
 }

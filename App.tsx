@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AppData, ModuleType } from './types';
 import { INITIAL_DATA } from './constants';
+import { fetchGlobalData } from './services/persistenceService';
 import FeatureCard from './components/FeatureCard';
 import VPai from './components/Modules/VPai';
 import Attendance from './components/Modules/Attendance';
@@ -22,9 +23,21 @@ const App: React.FC = () => {
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [password, setPassword] = useState('');
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Triple-tap logic
   const logoTaps = useRef<{ count: number; lastTime: number }>({ count: 0, lastTime: 0 });
+
+  useEffect(() => {
+    // Fetch Shared Global Data
+    const loadSharedData = async () => {
+      setIsLoading(true);
+      const data = await fetchGlobalData();
+      setAppData(data);
+      setIsLoading(false);
+    };
+    loadSharedData();
+  }, []);
 
   useEffect(() => {
     if (isDarkMode) {
@@ -79,6 +92,25 @@ const App: React.FC = () => {
     return <AdminPanel appData={appData} setAppData={setAppData} onExit={() => setIsAdminMode(false)} />;
   }
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-10 text-center">
+        <Logo className="w-32 h-32 mb-8 animate-pulse" />
+        <h2 className="text-xl font-black text-blue-400 uppercase tracking-tighter mb-2">Syncing Campus Intelligence</h2>
+        <div className="w-48 h-1 bg-slate-900 rounded-full overflow-hidden">
+          <div className="h-full bg-blue-500 animate-[loading_2s_ease-in-out_infinite]"></div>
+        </div>
+        <p className="mt-4 text-[10px] text-slate-500 font-bold uppercase tracking-widest">Connecting to Global QuadX Hub...</p>
+        <style>{`
+          @keyframes loading {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+          }
+        `}</style>
+      </div>
+    );
+  }
+
   return (
     <div className={`min-h-screen flex flex-col max-w-md mx-auto relative shadow-2xl overflow-hidden transition-colors duration-500 ${isDarkMode ? 'bg-slate-950 text-white' : 'bg-slate-50 text-slate-800'}`}>
       {/* Animated Background Blobs */}
@@ -96,7 +128,10 @@ const App: React.FC = () => {
           <div onClick={handleLogoClick} className="cursor-pointer select-none group flex items-center gap-2">
             <Logo className="w-16 h-16 transition-transform duration-500 group-hover:scale-110 active:scale-95" />
             <div className="flex flex-col">
-              <h1 className="text-2xl font-black bg-gradient-to-r from-blue-400 to-purple-600 bg-clip-text text-transparent tracking-tighter leading-none">QUADX</h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-black bg-gradient-to-r from-blue-400 to-purple-600 bg-clip-text text-transparent tracking-tighter leading-none">QUADX</h1>
+                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]" title="Connected to Cloud"></div>
+              </div>
               <span className="text-[8px] font-bold text-slate-400 tracking-[0.3em] uppercase opacity-60">Companion</span>
             </div>
           </div>
@@ -117,7 +152,7 @@ const App: React.FC = () => {
         {currentModule === 'DASHBOARD' && (
           <div className="mb-6 animate-fadeIn px-2">
             <h2 className="text-3xl font-black text-slate-800 dark:text-white tracking-tight">Hi, Student! 👋</h2>
-            <p className="text-slate-500 dark:text-slate-400 font-medium">Ready for classes today?</p>
+            <p className="text-slate-500 dark:text-slate-400 font-medium">Synced with Campus Intelligence</p>
           </div>
         )}
       </header>
