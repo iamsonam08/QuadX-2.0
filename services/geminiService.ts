@@ -8,7 +8,7 @@ const generateId = () => Math.random().toString(36).substr(2, 9);
  * Provides concise, accurate campus information based on uploaded data.
  */
 export async function askVPai(question: string, context: AppData) {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || "" });
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
@@ -144,7 +144,7 @@ const CATEGORY_SCHEMAS: Record<string, any> = {
  * Parses unstructured text, JSON-tables (from Excel/CSV), images, or PDF documents.
  */
 export async function extractCategoryData(category: string, content: string, mimeType: string = "text/plain") {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || "" });
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const schema = CATEGORY_SCHEMAS[category];
   const parts: any[] = [{ text: `Task: Extract structured JSON data for ${category} from the provided document input.
   Return an ARRAY of objects matching the schema.
@@ -177,7 +177,10 @@ export async function extractCategoryData(category: string, content: string, mim
       },
     });
 
-    const parsed = JSON.parse(response.text || '[]');
+    let rawText = response.text || '[]';
+    // Clean potential markdown formatting
+    const sanitizedText = rawText.replace(/```json\n?|```/g, '').trim();
+    const parsed = JSON.parse(sanitizedText);
     
     // Normalize with unique IDs
     return parsed.map((item: any) => ({
