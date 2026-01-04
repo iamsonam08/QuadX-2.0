@@ -1,8 +1,5 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { AppData } from "../types";
-
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || "" });
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
@@ -11,6 +8,7 @@ const generateId = () => Math.random().toString(36).substr(2, 9);
  * Provides concise, accurate campus information based on uploaded data.
  */
 export async function askVPai(question: string, context: AppData) {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || "" });
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
@@ -146,13 +144,17 @@ const CATEGORY_SCHEMAS: Record<string, any> = {
  * Parses unstructured text, JSON-tables (from Excel/CSV), images, or PDF documents.
  */
 export async function extractCategoryData(category: string, content: string, mimeType: string = "text/plain") {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || "" });
   const schema = CATEGORY_SCHEMAS[category];
   const parts: any[] = [{ text: `Task: Extract structured JSON data for ${category} from the provided document input.
-  The input may be plain text, a PDF, a JSON-formatted spreadsheet table, or an image.
-  Identify columns and rows correctly to map to the following schema.
-  Ensure you match branch names exactly: Comp, IT, Civil, Mech, Elect, AIDS, E&TC. 
-  Year levels: 1st Year, 2nd Year, 3rd Year, 4th Year.
-  For timetables, support all 7 days of the week: Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday.` }];
+  Return an ARRAY of objects matching the schema.
+  
+  RULES:
+  1. If input is a spreadsheet (JSON array of rows), map columns to the schema fields accurately.
+  2. Branch names MUST be: Comp, IT, Civil, Mech, Elect, AIDS, E&TC. 
+  3. Year levels MUST be: 1st Year, 2nd Year, 3rd Year, 4th Year.
+  4. For timetables, support all 7 days of the week.
+  5. DO NOT include any text outside the JSON array. Output ONLY valid JSON.` }];
 
   if (mimeType.startsWith('image/') || mimeType === 'application/pdf') {
     parts.push({
