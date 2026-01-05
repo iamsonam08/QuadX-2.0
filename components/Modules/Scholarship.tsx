@@ -1,4 +1,5 @@
-import React from 'react';
+
+import React, { useState, useMemo } from 'react';
 import { AppData, ScholarshipItem } from '../../types';
 
 interface ScholarshipProps {
@@ -7,8 +8,23 @@ interface ScholarshipProps {
 }
 
 const Scholarship: React.FC<ScholarshipProps> = ({ data, onBack }) => {
-  const girlsList = data.scholarships.filter(s => s.category === 'GIRLS');
-  const generalList = data.scholarships.filter(s => s.category === 'GENERAL' || !s.category);
+  const branches = ['Global', 'Comp', 'IT', 'Civil', 'Mech', 'Elect', 'AIDS', 'E&TC'];
+  const years = ['All Years', '1st Year', '2nd Year', '3rd Year', '4th Year'];
+
+  const [selBranch, setSelBranch] = useState(branches[0]);
+  const [selYear, setSelYear] = useState(years[0]);
+
+  // Filtering architecture copied from Timetable module
+  const filteredScholarships = useMemo(() => {
+    return data.scholarships.filter(s => {
+      const branchMatch = selBranch === 'Global' || !s.branch || s.branch === selBranch;
+      const yearMatch = selYear === 'All Years' || !s.year || s.year === selYear;
+      return branchMatch && yearMatch;
+    });
+  }, [data.scholarships, selBranch, selYear]);
+
+  const girlsList = useMemo(() => filteredScholarships.filter(s => s.category === 'GIRLS'), [filteredScholarships]);
+  const generalList = useMemo(() => filteredScholarships.filter(s => s.category === 'GENERAL' || !s.category), [filteredScholarships]);
 
   const renderCard = (s: ScholarshipItem, i: number) => (
     <div key={s.id} className="bg-white dark:bg-slate-900 p-6 rounded-[2.5rem] shadow-sm border border-amber-50 dark:border-slate-800 animate-slideUp" style={{ animationDelay: `${i * 100}ms` }}>
@@ -22,7 +38,15 @@ const Scholarship: React.FC<ScholarshipProps> = ({ data, onBack }) => {
         </div>
       </div>
       <h3 className="text-sm font-black text-slate-800 dark:text-slate-200 mb-1 leading-tight">{s.name}</h3>
-      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tight mb-4">{s.eligibility}</p>
+      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tight mb-2">{s.eligibility}</p>
+      
+      {(s.branch || s.year) && (
+        <div className="flex gap-2 mb-4">
+          {s.branch && <span className="text-[7px] font-black uppercase px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-full">{s.branch}</span>}
+          {s.year && <span className="text-[7px] font-black uppercase px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-full">{s.year}</span>}
+        </div>
+      )}
+
       <div className="flex justify-between items-center pt-4 border-t border-slate-50 dark:border-slate-800">
         <span className="text-[9px] text-rose-500 font-black uppercase tracking-tighter">Ends: {s.deadline}</span>
         <button className="bg-amber-500 text-white px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-amber-600 transition-all">
@@ -35,10 +59,28 @@ const Scholarship: React.FC<ScholarshipProps> = ({ data, onBack }) => {
   return (
     <div className="space-y-8 animate-fadeIn">
       <div className="flex items-center gap-4">
-        <button onClick={onBack} className="w-10 h-10 rounded-full bg-white dark:bg-slate-800 flex items-center justify-center shadow-sm">
+        <button onClick={onBack} className="w-10 h-10 rounded-full bg-white dark:bg-slate-800 flex items-center justify-center shadow-sm active:scale-90 transition-all">
           <i className="fa-solid fa-arrow-left"></i>
         </button>
         <h2 className="text-2xl font-black text-amber-600 tracking-tighter">Scholarship Hub</h2>
+      </div>
+
+      {/* Filters: Replicated from Timetable module */}
+      <div className="grid grid-cols-2 gap-2 bg-white dark:bg-slate-900 p-4 rounded-[2rem] shadow-sm border border-slate-100 dark:border-slate-800">
+        <div className="space-y-1">
+          <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">Branch</label>
+          <select value={selBranch} onChange={(e) => setSelBranch(e.target.value)}
+            className="w-full bg-slate-50 dark:bg-slate-800 rounded-xl px-2 py-2 text-[10px] font-black outline-none border-none cursor-pointer">
+            {branches.map(b => <option key={b} value={b}>{b}</option>)}
+          </select>
+        </div>
+        <div className="space-y-1">
+          <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">Year</label>
+          <select value={selYear} onChange={(e) => setSelYear(e.target.value)}
+            className="w-full bg-slate-50 dark:bg-slate-800 rounded-xl px-2 py-2 text-[10px] font-black outline-none border-none cursor-pointer">
+            {years.map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
       </div>
 
       <section className="space-y-4">

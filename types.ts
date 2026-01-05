@@ -1,3 +1,4 @@
+
 export type ModuleType = 
   | 'DASHBOARD'
   | 'VPAI' 
@@ -53,6 +54,8 @@ export interface ScholarshipItem {
   deadline: string;
   eligibility: string;
   category: 'GIRLS' | 'GENERAL';
+  branch?: string;
+  year?: string;
 }
 
 export interface InternshipItem {

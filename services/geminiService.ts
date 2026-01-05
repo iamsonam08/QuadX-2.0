@@ -74,7 +74,9 @@ const CATEGORY_SCHEMAS: Record<string, any> = {
         amount: { type: Type.STRING },
         deadline: { type: Type.STRING },
         eligibility: { type: Type.STRING },
-        category: { type: Type.STRING, enum: ["GIRLS", "GENERAL"] }
+        category: { type: Type.STRING, enum: ["GIRLS", "GENERAL"] },
+        branch: { type: Type.STRING },
+        year: { type: Type.STRING }
       },
       required: ["name", "amount", "deadline", "eligibility", "category"]
     }
@@ -156,11 +158,12 @@ export async function extractAndCategorize(content: string, mimeType: string = "
     category = classificationResponse.text?.trim().toUpperCase() || 'ANNOUNCEMENT';
   }
 
-  // Sanitize category
+  // Sanitize category / Handle plural aliases
+  if (category === 'SCHOLARSHIPS') category = 'SCHOLARSHIP';
   if (!CATEGORY_SCHEMAS[category]) category = 'ANNOUNCEMENT';
 
   const schema = CATEGORY_SCHEMAS[category];
-  const parts: any[] = [{ text: `Task: Extract structured JSON data for ${category} from input. Output ONLY a valid JSON array matching the schema.` }];
+  const parts: any[] = [{ text: `Task: Extract structured JSON data for ${category} from input. Output ONLY a valid JSON array matching the schema. For SCHOLARSHIP, if branch or year are not specified, you may omit them or use "Global".` }];
 
   if (mimeType.startsWith('image/') || mimeType === 'application/pdf') {
     parts.push({
