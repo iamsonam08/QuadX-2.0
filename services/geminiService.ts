@@ -216,14 +216,22 @@ export async function extractAndCategorize(content: string, mimeType: string = "
     });
 
     const parsed = JSON.parse(response.text || '[]');
-    const items = parsed.map((item: any) => ({
-      ...item,
-      id: generateId(),
-      createdAt: new Date().toLocaleString(),
-      sourceType: mimeType === 'application/json' ? 'EXCEL' : (mimeType.includes('text') ? 'MANUAL' : 'DOCUMENT'),
-      timestamp: new Date().toLocaleString(),
-      slots: item.slots ? item.slots.map((s: any) => ({ ...s, id: generateId() })) : undefined
-    }));
+    const items = parsed.map((item: any) => {
+      const newItem: any = {
+        ...item,
+        id: generateId(),
+        createdAt: new Date().toLocaleString(),
+        sourceType: mimeType === 'application/json' ? 'EXCEL' : (mimeType.includes('text') ? 'MANUAL' : 'DOCUMENT'),
+        timestamp: new Date().toLocaleString(),
+      };
+
+      // Only add and process slots if they exist (for Timetable entries)
+      if (item.slots && Array.isArray(item.slots)) {
+        newItem.slots = item.slots.map((s: any) => ({ ...s, id: generateId() }));
+      }
+
+      return newItem;
+    });
 
     return { category, items };
   } catch (error) {
