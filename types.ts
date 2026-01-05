@@ -59,6 +59,8 @@ export interface ScholarshipItem {
   applicationLink?: string;
   sourceType?: string;
   createdAt?: string;
+  originalFileName?: string;
+  rawContent?: string;
 }
 
 export interface InternshipItem {
@@ -87,6 +89,9 @@ export interface Announcement {
   content: string;
   timestamp: string;
   priority: 'HIGH' | 'NORMAL';
+  originalFileName?: string;
+  mimeType?: string;
+  rawContent?: string; // Base64 or raw text fallback
 }
 
 export interface Complaint {

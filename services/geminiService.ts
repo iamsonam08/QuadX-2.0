@@ -2,39 +2,26 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { AppData } from "../types";
 
-// Helper to generate a unique ID for new records
 const generateId = () => Math.random().toString(36).substring(2, 11);
 
-/**
- * Check if the API Key is available
- */
 export function isApiKeyConfigured(): boolean {
   return !!process.env.API_KEY && process.env.API_KEY !== '';
 }
 
-/**
- * VPai Chat Assistant
- */
 export async function askVPai(question: string, context: AppData) {
-  if (!isApiKeyConfigured()) {
-    return "API Key is not configured! 🔑";
-  }
-
+  if (!isApiKeyConfigured()) return "API Key is not configured! 🔑";
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: question,
       config: {
-        systemInstruction: `You are VPai, the official AI assistant for QuadX College. 
-        KNOWLEDGE BASE: ${JSON.stringify(context)}
-        RULES: Be concise. If info is missing, say "I don't have that info yet! 📚"`,
+        systemInstruction: `You are VPai, the official AI assistant for QuadX College. KNOWLEDGE BASE: ${JSON.stringify(context)}`,
         temperature: 0.4,
       }
     });
     return response.text?.trim() || "I'm thinking... but nothing came out.";
   } catch (error) {
-    console.error("VPai Connection Error:", error);
     return "Connection hiccup. Check your API key! ⚡";
   }
 }
@@ -56,13 +43,11 @@ const CATEGORY_SCHEMAS: Record<string, any> = {
             properties: {
               time: { type: Type.STRING },
               subject: { type: Type.STRING },
-              room: { type: Type.STRING },
-              color: { type: Type.STRING }
+              room: { type: Type.STRING }
             }
           }
         }
-      },
-      required: ["day", "branch", "year", "division", "slots"]
+      }
     }
   },
   'SCHOLARSHIP': {
@@ -74,57 +59,8 @@ const CATEGORY_SCHEMAS: Record<string, any> = {
         amount: { type: Type.STRING },
         deadline: { type: Type.STRING },
         eligibility: { type: Type.STRING },
-        category: { type: Type.STRING, enum: ["GIRLS", "GENERAL"] },
-        branch: { type: Type.STRING },
-        year: { type: Type.STRING },
-        applicationLink: { type: Type.STRING }
-      },
-      required: ["name", "amount", "deadline", "eligibility", "category"]
-    }
-  },
-  'EVENT': {
-    type: Type.ARRAY,
-    items: {
-      type: Type.OBJECT,
-      properties: {
-        title: { type: Type.STRING },
-        date: { type: Type.STRING },
-        venue: { type: Type.STRING },
-        description: { type: Type.STRING },
-        category: { type: Type.STRING }
-      },
-      required: ["title", "date", "venue", "description", "category"]
-    }
-  },
-  'EXAM': {
-    type: Type.ARRAY,
-    items: {
-      type: Type.OBJECT,
-      properties: {
-        subject: { type: Type.STRING },
-        date: { type: Type.STRING },
-        time: { type: Type.STRING },
-        venue: { type: Type.STRING },
-        branch: { type: Type.STRING },
-        year: { type: Type.STRING },
-        division: { type: Type.STRING }
-      },
-      required: ["subject", "date", "time", "venue", "branch", "year", "division"]
-    }
-  },
-  'INTERNSHIP': {
-    type: Type.ARRAY,
-    items: {
-      type: Type.OBJECT,
-      properties: {
-        company: { type: Type.STRING },
-        role: { type: Type.STRING },
-        location: { type: Type.STRING },
-        stipend: { type: Type.STRING },
-        branch: { type: Type.STRING },
-        year: { type: Type.STRING }
-      },
-      required: ["company", "role", "location", "stipend", "branch", "year"]
+        category: { type: Type.STRING, enum: ["GIRLS", "GENERAL"] }
+      }
     }
   },
   'ANNOUNCEMENTS': {
@@ -134,121 +70,66 @@ const CATEGORY_SCHEMAS: Record<string, any> = {
       properties: {
         title: { type: Type.STRING },
         content: { type: Type.STRING },
-        priority: { type: Type.STRING, enum: ["HIGH", "NORMAL"] }
-      },
-      required: ["title", "content", "priority"]
+        priority: { type: Type.STRING }
+      }
     }
   }
 };
 
-/**
- * AI Content Extraction & Categorization with Smart Routing
- */
-export async function extractAndCategorize(content: string, mimeType: string = "text/plain", preferredCategory?: string): Promise<{ category: string, items: any[] } | null> {
-  if (!isApiKeyConfigured()) {
-    console.error("API Key missing in environment");
-    return null;
-  }
+export async function extractAndCategorize(content: string, mimeType: string = "text/plain", fileName?: string): Promise<{ category: string, items: any[] }> {
+  const fallback = {
+    category: 'ANNOUNCEMENTS',
+    items: [{
+      id: generateId(),
+      title: fileName || "New Uploaded Document",
+      content: content.length > 500 ? content.substring(0, 500) + "..." : content,
+      rawContent: content,
+      mimeType: mimeType,
+      originalFileName: fileName,
+      priority: 'NORMAL',
+      timestamp: new Date().toLocaleString()
+    }]
+  };
+
+  if (!isApiKeyConfigured()) return fallback;
 
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
-  // 1. Classification Step - The Smart Router
-  let category: string = (preferredCategory || '').toUpperCase();
-  
-  if (!category || category === 'DASHBOARD') {
-    const classificationPrompt = `
-      Analyze the following college content and classify it into EXACTLY ONE of these categories:
-      TIMETABLE, SCHOLARSHIP, EVENT, EXAM, INTERNSHIP, ANNOUNCEMENTS.
-      Respond with ONLY the word of the category.
-      
-      CONTENT:
-      ${content.substring(0, 3000)}
-    `;
-    
-    try {
-      const classResponse = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: classificationPrompt
-      });
-      const rawText = (classResponse.text || '').toUpperCase();
-      // Use regex to find the category in case AI is verbose
-      const match = rawText.match(/TIMETABLE|SCHOLARSHIP|EVENT|EXAM|INTERNSHIP|ANNOUNCEMENTS/);
-      category = match ? match[0] : 'ANNOUNCEMENTS';
-      console.log("AI Smart Routed to:", category);
-    } catch (e) {
-      console.error("Classification failure:", e);
-      category = 'ANNOUNCEMENTS';
-    }
-  }
-
-  // Normalize
-  if (category === 'SCHOLARSHIPS') category = 'SCHOLARSHIP';
-  if (category === 'EVENTS') category = 'EVENT';
-  if (category === 'EXAMS') category = 'EXAM';
-  if (category === 'INTERNSHIPS') category = 'INTERNSHIP';
-
-  if (!CATEGORY_SCHEMAS[category]) {
-    console.warn("Falling back to ANNOUNCEMENTS for category:", category);
-    category = 'ANNOUNCEMENTS';
-  }
-
-  const schema = CATEGORY_SCHEMAS[category];
-  const extractionPrompt = `
-    Extract data for ${category} as a JSON array. 
-    Map every row/item found in the input. 
-    Return ONLY valid JSON.
-  `;
-
-  const parts: any[] = [{ text: extractionPrompt }];
-
-  if (mimeType.startsWith('image/') || mimeType === 'application/pdf') {
-    parts.push({
-      inlineData: {
-        data: content.includes(',') ? content.split(',')[1] : content,
-        mimeType: mimeType
-      }
-    });
-  } else {
-    parts.push({ text: `DATA:\n${content}` });
-  }
-
   try {
-    const response = await ai.models.generateContent({
+    // 1. Classification
+    const classResponse = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: { parts },
+      contents: `Classify this content as TIMETABLE, SCHOLARSHIP, or ANNOUNCEMENTS. Return ONLY the word. Data: ${content.substring(0, 500)}`
+    });
+    const category = (classResponse.text || 'ANNOUNCEMENTS').trim().toUpperCase();
+    const activeCategory = CATEGORY_SCHEMAS[category] ? category : 'ANNOUNCEMENTS';
+
+    // 2. Extraction
+    const extractResponse = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: `Extract data for ${activeCategory} from this: ${content}`,
       config: {
         responseMimeType: "application/json",
-        responseSchema: schema,
-      },
-    });
-
-    const parsed = JSON.parse(response.text || '[]');
-    const items = parsed.map((item: any) => {
-      // Clean undefined fields to prevent Firestore errors
-      const cleanedItem: any = {
-        id: generateId(),
-        createdAt: new Date().toLocaleString(),
-        sourceType: mimeType === 'application/json' ? 'EXCEL' : (mimeType.includes('text') ? 'MANUAL' : 'DOCUMENT'),
-        timestamp: new Date().toLocaleString(),
-      };
-
-      Object.keys(item).forEach(key => {
-        if (item[key] !== undefined) cleanedItem[key] = item[key];
-      });
-
-      if (cleanedItem.slots && Array.isArray(cleanedItem.slots)) {
-        cleanedItem.slots = cleanedItem.slots.map((s: any) => ({ 
-          ...s, 
-          id: s.id || generateId() 
-        }));
+        responseSchema: CATEGORY_SCHEMAS[activeCategory]
       }
-
-      return cleanedItem;
     });
 
-    return { category, items };
+    const items = JSON.parse(extractResponse.text || '[]');
+    if (!Array.isArray(items) || items.length === 0) return fallback;
+
+    return {
+      category: activeCategory,
+      items: items.map(item => ({
+        ...item,
+        id: generateId(),
+        timestamp: new Date().toLocaleString(),
+        originalFileName: fileName,
+        rawContent: content,
+        mimeType: mimeType
+      }))
+    };
   } catch (error) {
-    console.error("Extraction error:", error);
-    return null;
+    console.error("AI Error, using fallback:", error);
+    return fallback;
   }
 }
