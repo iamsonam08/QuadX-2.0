@@ -25,15 +25,13 @@ export const COLLECTIONS = {
   INTERNSHIPS: "internships",
   ANNOUNCEMENTS: "announcements",
   COMPLAINTS: "complaints",
-  CONFIG: "config" // For campusMapImage and other global settings
+  CONFIG: "config" 
 };
 
 /**
  * Sets up a real-time aggregator listener for all campus collections.
- * This is the HEART of the real-time student UI.
  */
 export function subscribeToGlobalData(onUpdate: (data: AppData) => void): () => void {
-  // Local cache to aggregate results from multiple streams
   const state: AppData = { ...INITIAL_DATA };
   const unsubscribers: (() => void)[] = [];
 
@@ -43,7 +41,6 @@ export function subscribeToGlobalData(onUpdate: (data: AppData) => void): () => 
     onUpdate({ ...state });
   };
 
-  // 1. Subscribe to individual collections
   const listeners = [
     { coll: COLLECTIONS.ATTENDANCE, key: 'attendance' as keyof AppData },
     { coll: COLLECTIONS.TIMETABLE, key: 'timetable' as keyof AppData },
@@ -61,7 +58,6 @@ export function subscribeToGlobalData(onUpdate: (data: AppData) => void): () => 
     unsubscribers.push(unsub);
   });
 
-  // 2. Subscribe to Global Config (Map, etc)
   const configDoc = doc(db, COLLECTIONS.CONFIG, "main");
   const unsubConfig = onSnapshot(configDoc, (snap) => {
     if (snap.exists()) {
@@ -73,7 +69,6 @@ export function subscribeToGlobalData(onUpdate: (data: AppData) => void): () => 
   });
   unsubscribers.push(unsubConfig);
 
-  // Return master cleanup
   return () => unsubscribers.forEach(u => u());
 }
 
@@ -82,15 +77,23 @@ export function subscribeToGlobalData(onUpdate: (data: AppData) => void): () => 
  */
 export async function saveExtractedItems(category: string, items: any[]): Promise<void> {
   const collectionName = mapCategoryToCollection(category);
-  if (!collectionName) return;
+  if (!collectionName) {
+    console.error("Mapping failed for category:", category);
+    return;
+  }
+
+  console.log(`Saving ${items.length} items to ${collectionName}...`);
 
   for (const item of items) {
-    const { id, ...data } = item;
-    // We use setDoc if ID exists to allow updates, or addDoc if not.
-    if (id) {
-      await setDoc(doc(db, collectionName, id), data);
-    } else {
-      await addDoc(collection(db, collectionName), data);
+    try {
+      const { id, ...data } = item;
+      if (id) {
+        await setDoc(doc(db, collectionName, id), data);
+      } else {
+        await addDoc(collection(db, collectionName), data);
+      }
+    } catch (err) {
+      console.error("Firestore Save Error:", err);
     }
   }
 }
@@ -113,18 +116,19 @@ export async function saveGlobalConfig(config: Partial<AppData>): Promise<void> 
 }
 
 /**
- * Simple helper to map UI categories to Firestore collections.
+ * Map UI/AI categories to Firestore collections.
  */
 function mapCategoryToCollection(category: string): string | null {
-  switch (category.toUpperCase()) {
-    case 'TIMETABLE': return COLLECTIONS.TIMETABLE;
-    case 'SCHOLARSHIP': return COLLECTIONS.SCHOLARSHIPS;
-    case 'EVENT': return COLLECTIONS.EVENTS;
-    case 'EXAM': return COLLECTIONS.EXAMS;
-    case 'INTERNSHIP': return COLLECTIONS.INTERNSHIPS;
-    case 'ATTENDANCE': return COLLECTIONS.ATTENDANCE;
-    case 'ANNOUNCEMENTS': return COLLECTIONS.ANNOUNCEMENTS;
-    case 'COMPLAINTS': return COLLECTIONS.COMPLAINTS;
-    default: return null;
-  }
+  const normalized = category.toUpperCase();
+  
+  if (normalized.includes('TIMETABLE')) return COLLECTIONS.TIMETABLE;
+  if (normalized.includes('SCHOLARSHIP')) return COLLECTIONS.SCHOLARSHIPS;
+  if (normalized.includes('EVENT')) return COLLECTIONS.EVENTS;
+  if (normalized.includes('EXAM')) return COLLECTIONS.EXAMS;
+  if (normalized.includes('INTERNSHIP')) return COLLECTIONS.INTERNSHIPS;
+  if (normalized.includes('ATTENDANCE')) return COLLECTIONS.ATTENDANCE;
+  if (normalized.includes('ANNOUNCEMENT')) return COLLECTIONS.ANNOUNCEMENTS;
+  if (normalized.includes('COMPLAINT')) return COLLECTIONS.COMPLAINTS;
+  
+  return null;
 }

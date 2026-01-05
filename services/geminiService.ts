@@ -145,7 +145,10 @@ const CATEGORY_SCHEMAS: Record<string, any> = {
  * AI Content Extraction & Categorization with Smart Routing
  */
 export async function extractAndCategorize(content: string, mimeType: string = "text/plain", preferredCategory?: string): Promise<{ category: string, items: any[] } | null> {
-  if (!isApiKeyConfigured()) return null;
+  if (!isApiKeyConfigured()) {
+    console.error("API Key missing in environment");
+    return null;
+  }
 
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
@@ -156,10 +159,10 @@ export async function extractAndCategorize(content: string, mimeType: string = "
     const classificationPrompt = `
       Analyze the following college content and classify it into EXACTLY ONE of these categories:
       TIMETABLE, SCHOLARSHIP, EVENT, EXAM, INTERNSHIP, ANNOUNCEMENTS.
-      Respond ONLY with the category name.
+      Respond with ONLY the word of the category.
       
-      CONTENT SAMPLE:
-      ${content.substring(0, 2000)}
+      CONTENT:
+      ${content.substring(0, 3000)}
     `;
     
     try {
@@ -167,29 +170,33 @@ export async function extractAndCategorize(content: string, mimeType: string = "
         model: 'gemini-3-flash-preview',
         contents: classificationPrompt
       });
-      category = (classResponse.text || 'ANNOUNCEMENTS').trim().toUpperCase();
-      console.log("Smart Route Classification:", category);
+      const rawText = (classResponse.text || '').toUpperCase();
+      // Use regex to find the category in case AI is verbose
+      const match = rawText.match(/TIMETABLE|SCHOLARSHIP|EVENT|EXAM|INTERNSHIP|ANNOUNCEMENTS/);
+      category = match ? match[0] : 'ANNOUNCEMENTS';
+      console.log("AI Smart Routed to:", category);
     } catch (e) {
+      console.error("Classification failure:", e);
       category = 'ANNOUNCEMENTS';
     }
   }
 
-  // Sanitize mapping
-  if (category === 'SCHOLARSHIPS') category = 'SCHOLARSHIP'; // Unify
+  // Normalize
+  if (category === 'SCHOLARSHIPS') category = 'SCHOLARSHIP';
+  if (category === 'EVENTS') category = 'EVENT';
+  if (category === 'EXAMS') category = 'EXAM';
+  if (category === 'INTERNSHIPS') category = 'INTERNSHIP';
+
   if (!CATEGORY_SCHEMAS[category]) {
-    console.warn("Unknown category classified:", category);
+    console.warn("Falling back to ANNOUNCEMENTS for category:", category);
     category = 'ANNOUNCEMENTS';
   }
 
   const schema = CATEGORY_SCHEMAS[category];
   const extractionPrompt = `
-    Extract structured JSON data for ${category} from the input. 
-    Follow these rules strictly:
-    1. Output ONLY a valid JSON array matching the schema.
-    2. Do NOT include markdown formatting or explanations.
-    3. If data is in a table (like Excel or PDF table), map each row to an object.
-    4. For SCHOLARSHIP, extract 'name', 'amount', 'deadline', 'eligibility', 'category' (GIRLS or GENERAL).
-    5. For TIMETABLE, extract 'day', 'branch', 'year', 'division', and 'slots' (time, subject, room).
+    Extract data for ${category} as a JSON array. 
+    Map every row/item found in the input. 
+    Return ONLY valid JSON.
   `;
 
   const parts: any[] = [{ text: extractionPrompt }];
@@ -202,7 +209,7 @@ export async function extractAndCategorize(content: string, mimeType: string = "
       }
     });
   } else {
-    parts.push({ text: `INPUT DATA:\n${content}` });
+    parts.push({ text: `DATA:\n${content}` });
   }
 
   try {
@@ -217,25 +224,31 @@ export async function extractAndCategorize(content: string, mimeType: string = "
 
     const parsed = JSON.parse(response.text || '[]');
     const items = parsed.map((item: any) => {
-      const newItem: any = {
-        ...item,
+      // Clean undefined fields to prevent Firestore errors
+      const cleanedItem: any = {
         id: generateId(),
         createdAt: new Date().toLocaleString(),
         sourceType: mimeType === 'application/json' ? 'EXCEL' : (mimeType.includes('text') ? 'MANUAL' : 'DOCUMENT'),
         timestamp: new Date().toLocaleString(),
       };
 
-      // Only add and process slots if they exist (for Timetable entries)
-      if (item.slots && Array.isArray(item.slots)) {
-        newItem.slots = item.slots.map((s: any) => ({ ...s, id: generateId() }));
+      Object.keys(item).forEach(key => {
+        if (item[key] !== undefined) cleanedItem[key] = item[key];
+      });
+
+      if (cleanedItem.slots && Array.isArray(cleanedItem.slots)) {
+        cleanedItem.slots = cleanedItem.slots.map((s: any) => ({ 
+          ...s, 
+          id: s.id || generateId() 
+        }));
       }
 
-      return newItem;
+      return cleanedItem;
     });
 
     return { category, items };
   } catch (error) {
-    console.error("AI Smart Route Error:", error);
+    console.error("Extraction error:", error);
     return null;
   }
 }
