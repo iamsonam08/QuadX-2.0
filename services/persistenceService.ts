@@ -1,87 +1,130 @@
 
-// Fix: Import from @firebase/firestore directly to ensure modular exports are found by the compiler
-import { doc, onSnapshot, getDoc, setDoc } from "@firebase/firestore";
+import { 
+  collection, 
+  onSnapshot, 
+  doc, 
+  getDoc, 
+  setDoc, 
+  deleteDoc, 
+  addDoc,
+  query,
+  DocumentData,
+  QuerySnapshot
+} from "@firebase/firestore";
 import { db } from "../firebase";
-import { AppData } from "../types";
+import { AppData, TimetableEntry, AttendanceRecord, ScholarshipItem, CampusEvent, ExamSchedule, InternshipItem, Announcement, Complaint } from "../types";
 import { INITIAL_DATA } from "../constants";
 
-const SYNC_ID = "quadx_v4_firebase_sync";
+// Collection Names
+export const COLLECTIONS = {
+  ATTENDANCE: "attendance",
+  TIMETABLE: "timetable",
+  SCHOLARSHIPS: "scholarships",
+  EVENTS: "events",
+  EXAMS: "exams",
+  INTERNSHIPS: "internships",
+  ANNOUNCEMENTS: "announcements",
+  COMPLAINTS: "complaints",
+  CONFIG: "config" // For campusMapImage and other global settings
+};
 
 /**
- * Sets up a real-time listener for the global campus data.
- * Adopts Modular SDK (v9+) syntax for robust real-time synchronization.
+ * Sets up a real-time aggregator listener for all campus collections.
+ * This is the HEART of the real-time student UI.
  */
 export function subscribeToGlobalData(onUpdate: (data: AppData) => void): () => void {
-  // Create a document reference using the modular doc() function
-  const docRef = doc(db, "quadx", "main");
-  
-  // onSnapshot is now a top-level function in the modular SDK
-  return onSnapshot(docRef, (docSnap) => {
-    if (docSnap.exists()) {
-      const cloudData = docSnap.data() as AppData;
-      if (cloudData && typeof cloudData === 'object' && Array.isArray(cloudData.timetable)) {
-        localStorage.setItem(SYNC_ID, JSON.stringify(cloudData));
-        onUpdate(cloudData);
-      }
-    } else {
-      console.log("Sync: No remote data found. Using local or initial data.");
-      onUpdate(getLocalFallback());
-    }
-  }, (error) => {
-    console.error("Firestore Subscription Error:", error);
+  // Local cache to aggregate results from multiple streams
+  const state: AppData = { ...INITIAL_DATA };
+  const unsubscribers: (() => void)[] = [];
+
+  const handleSnapshot = (key: keyof AppData, snapshot: QuerySnapshot<DocumentData>) => {
+    const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    (state[key] as any) = items;
+    onUpdate({ ...state });
+  };
+
+  // 1. Subscribe to individual collections
+  const listeners = [
+    { coll: COLLECTIONS.ATTENDANCE, key: 'attendance' as keyof AppData },
+    { coll: COLLECTIONS.TIMETABLE, key: 'timetable' as keyof AppData },
+    { coll: COLLECTIONS.SCHOLARSHIPS, key: 'scholarships' as keyof AppData },
+    { coll: COLLECTIONS.EVENTS, key: 'events' as keyof AppData },
+    { coll: COLLECTIONS.EXAMS, key: 'exams' as keyof AppData },
+    { coll: COLLECTIONS.INTERNSHIPS, key: 'internships' as keyof AppData },
+    { coll: COLLECTIONS.ANNOUNCEMENTS, key: 'announcements' as keyof AppData },
+    { coll: COLLECTIONS.COMPLAINTS, key: 'complaints' as keyof AppData },
+  ];
+
+  listeners.forEach(({ coll, key }) => {
+    const q = query(collection(db, coll));
+    const unsub = onSnapshot(q, (snapshot) => handleSnapshot(key, snapshot));
+    unsubscribers.push(unsub);
   });
+
+  // 2. Subscribe to Global Config (Map, etc)
+  const configDoc = doc(db, COLLECTIONS.CONFIG, "main");
+  const unsubConfig = onSnapshot(configDoc, (snap) => {
+    if (snap.exists()) {
+      const config = snap.data();
+      state.campusMapImage = config.campusMapImage;
+      state.rawKnowledge = config.rawKnowledge || [];
+      onUpdate({ ...state });
+    }
+  });
+  unsubscribers.push(unsubConfig);
+
+  // Return master cleanup
+  return () => unsubscribers.forEach(u => u());
 }
 
 /**
- * Fetches the latest campus data from Firebase Firestore (One-time fetch).
+ * Saves extracted items to a specific collection.
  */
-export async function fetchGlobalData(): Promise<AppData> {
-  try {
-    const docRef = doc(db, "quadx", "main");
-    const docSnap = await getDoc(docRef);
+export async function saveExtractedItems(category: string, items: any[]): Promise<void> {
+  const collectionName = mapCategoryToCollection(category);
+  if (!collectionName) return;
 
-    if (docSnap.exists()) {
-      const cloudData = docSnap.data() as AppData;
-      if (cloudData && typeof cloudData === 'object' && Array.isArray(cloudData.timetable)) {
-        localStorage.setItem(SYNC_ID, JSON.stringify(cloudData));
-        return cloudData;
-      }
+  for (const item of items) {
+    const { id, ...data } = item;
+    // We use setDoc if ID exists to allow updates, or addDoc if not.
+    if (id) {
+      await setDoc(doc(db, collectionName, id), data);
+    } else {
+      await addDoc(collection(db, collectionName), data);
     }
-    return getLocalFallback();
-  } catch (error) {
-    console.error("Critical Cloud Fetch Error:", error);
-    return getLocalFallback();
   }
 }
 
 /**
- * Broadcasts data to every student computer via Firebase.
+ * Deletes a specific item from a collection.
  */
-export async function saveGlobalData(data: AppData): Promise<boolean> {
-  try {
-    localStorage.setItem(SYNC_ID, JSON.stringify(data));
-    const docRef = doc(db, "quadx", "main");
-    // setDoc is used for one-time writes in the modular SDK
-    await setDoc(docRef, data);
-    console.log("Global Broadcast: Deployment Successful via Firebase! 🔥");
-    return true;
-  } catch (error) {
-    console.error("Broadcast: Firebase Connection Failed.", error);
-    return false;
-  }
+export async function deleteItemFromCloud(category: string, id: string): Promise<void> {
+  const collectionName = mapCategoryToCollection(category);
+  if (!collectionName) return;
+  await deleteDoc(doc(db, collectionName, id));
 }
 
-function getLocalFallback(): AppData {
-  const local = localStorage.getItem(SYNC_ID);
-  if (local) {
-    try {
-      const parsed = JSON.parse(local);
-      if (parsed && typeof parsed === 'object' && parsed.timetable) {
-        return parsed;
-      }
-    } catch (e) {
-      console.warn("Local storage cache is corrupted.");
-    }
+/**
+ * Updates global campus settings (Map, etc.)
+ */
+export async function saveGlobalConfig(config: Partial<AppData>): Promise<void> {
+  const configDoc = doc(db, COLLECTIONS.CONFIG, "main");
+  await setDoc(configDoc, config, { merge: true });
+}
+
+/**
+ * Simple helper to map UI categories to Firestore collections.
+ */
+function mapCategoryToCollection(category: string): string | null {
+  switch (category.toUpperCase()) {
+    case 'TIMETABLE': return COLLECTIONS.TIMETABLE;
+    case 'SCHOLARSHIP': return COLLECTIONS.SCHOLARSHIPS;
+    case 'EVENT': return COLLECTIONS.EVENTS;
+    case 'EXAM': return COLLECTIONS.EXAMS;
+    case 'INTERNSHIP': return COLLECTIONS.INTERNSHIPS;
+    case 'ATTENDANCE': return COLLECTIONS.ATTENDANCE;
+    case 'ANNOUNCEMENTS': return COLLECTIONS.ANNOUNCEMENTS;
+    case 'COMPLAINTS': return COLLECTIONS.COMPLAINTS;
+    default: return null;
   }
-  return INITIAL_DATA;
 }
