@@ -26,68 +26,22 @@ export async function askVPai(question: string, context: AppData) {
   }
 }
 
-const CATEGORY_SCHEMAS: Record<string, any> = {
-  'TIMETABLE': {
-    type: Type.ARRAY,
-    items: {
-      type: Type.OBJECT,
-      properties: {
-        day: { type: Type.STRING },
-        branch: { type: Type.STRING },
-        year: { type: Type.STRING },
-        division: { type: Type.STRING },
-        slots: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              time: { type: Type.STRING },
-              subject: { type: Type.STRING },
-              room: { type: Type.STRING }
-            }
-          }
-        }
-      }
-    }
-  },
-  'SCHOLARSHIP': {
-    type: Type.ARRAY,
-    items: {
-      type: Type.OBJECT,
-      properties: {
-        name: { type: Type.STRING },
-        amount: { type: Type.STRING },
-        deadline: { type: Type.STRING },
-        eligibility: { type: Type.STRING },
-        category: { type: Type.STRING, enum: ["GIRLS", "GENERAL"] }
-      }
-    }
-  },
-  'ANNOUNCEMENTS': {
-    type: Type.ARRAY,
-    items: {
-      type: Type.OBJECT,
-      properties: {
-        title: { type: Type.STRING },
-        content: { type: Type.STRING },
-        priority: { type: Type.STRING }
-      }
-    }
-  }
-};
-
-export async function extractAndCategorize(content: string, mimeType: string = "text/plain", fileName?: string): Promise<{ category: string, items: any[] }> {
+/**
+ * Enhanced AI Extraction for QuadX 2.0
+ */
+export async function extractAndCategorize(fileData: string, mimeType: string, fileName: string): Promise<{ collection: string, items: any[] }> {
   const fallback = {
-    category: 'ANNOUNCEMENTS',
+    collection: 'broadcasts',
     items: [{
       id: generateId(),
-      title: fileName || "New Uploaded Document",
-      content: content.length > 500 ? content.substring(0, 500) + "..." : content,
-      rawContent: content,
-      mimeType: mimeType,
-      originalFileName: fileName,
+      title: fileName,
+      category: 'broadcasts',
+      branch: ['Comp', 'IT', 'Civil', 'Mech', 'Elect', 'AIDS', 'E&TC'],
+      year: ['1st Year', '2nd Year', '3rd Year', '4th Year'],
+      summary: "Manual processing fallback.",
+      aiProcessed: false,
       priority: 'NORMAL',
-      timestamp: new Date().toLocaleString()
+      fileUrl: fileData
     }]
   };
 
@@ -96,40 +50,68 @@ export async function extractAndCategorize(content: string, mimeType: string = "
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   try {
-    // 1. Classification
-    const classResponse = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: `Classify this content as TIMETABLE, SCHOLARSHIP, or ANNOUNCEMENTS. Return ONLY the word. Data: ${content.substring(0, 500)}`
-    });
-    const category = (classResponse.text || 'ANNOUNCEMENTS').trim().toUpperCase();
-    const activeCategory = CATEGORY_SCHEMAS[category] ? category : 'ANNOUNCEMENTS';
+    const prompt = `Analyze this college document: "${fileName}". 
+    1. Extract all meaningful text and data.
+    2. Categorize it as: internships, scholarships, exam_notices, timetable, or broadcasts.
+    3. Identify applicable Branches (Comp, IT, Civil, Mech, Elect, AIDS, E&TC).
+    4. Identify applicable Years (1st Year, 2nd Year, 3rd Year, 4th Year).
+    5. Generate a short summary and tags (e.g. "paid", "deadline", "government").
+    6. Return a valid JSON array of objects.`;
 
-    // 2. Extraction
-    const extractResponse = await ai.models.generateContent({
+    const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: `Extract data for ${activeCategory} from this: ${content}`,
+      contents: [
+        { text: prompt },
+        { inlineData: { mimeType: mimeType === 'application/pdf' ? 'application/pdf' : 'image/jpeg', data: fileData.split(',')[1] || fileData } }
+      ],
       config: {
         responseMimeType: "application/json",
-        responseSchema: CATEGORY_SCHEMAS[activeCategory]
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            collection: { type: Type.STRING, description: "Target collection name" },
+            items: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  title: { type: Type.STRING },
+                  summary: { type: Type.STRING },
+                  branch: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  year: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  tags: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  // Categorical specific fields
+                  company: { type: Type.STRING },
+                  role: { type: Type.STRING },
+                  stipend: { type: Type.STRING },
+                  amount: { type: Type.STRING },
+                  deadline: { type: Type.STRING },
+                  date: { type: Type.STRING },
+                  venue: { type: Type.STRING },
+                  subject: { type: Type.STRING }
+                }
+              }
+            }
+          }
+        }
       }
     });
 
-    const items = JSON.parse(extractResponse.text || '[]');
-    if (!Array.isArray(items) || items.length === 0) return fallback;
+    const result = JSON.parse(response.text || '{}');
+    if (!result.collection || !result.items) return fallback;
 
     return {
-      category: activeCategory,
-      items: items.map(item => ({
+      collection: result.collection.toLowerCase(),
+      items: result.items.map((item: any) => ({
         ...item,
         id: generateId(),
-        timestamp: new Date().toLocaleString(),
-        originalFileName: fileName,
-        rawContent: content,
-        mimeType: mimeType
+        aiProcessed: true,
+        fileUrl: fileData,
+        category: result.collection
       }))
     };
   } catch (error) {
-    console.error("AI Error, using fallback:", error);
+    console.error("Gemini Deep Extraction Failed:", error);
     return fallback;
   }
 }

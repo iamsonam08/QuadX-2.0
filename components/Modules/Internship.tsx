@@ -16,7 +16,6 @@ const Internship: React.FC<InternshipProps> = ({ data, onBack }) => {
 
   const filteredInternships = useMemo(() => {
     return data.internships.filter(job => 
-      // Fix: Use .includes() for array comparisons
       job.branch.includes(selBranch) && job.year.includes(selYear)
     );
   }, [data.internships, selBranch, selYear]);
@@ -56,24 +55,49 @@ const Internship: React.FC<InternshipProps> = ({ data, onBack }) => {
           </div>
         ) : (
           filteredInternships.map((job, i) => (
-            <div key={job.id} className="bg-white dark:bg-slate-900 p-6 rounded-[2.5rem] shadow-sm border border-cyan-50 dark:border-slate-800 flex gap-4 animate-slideUp" style={{ animationDelay: `${i * 100}ms` }}>
-              <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 rounded-xl flex-shrink-0 flex items-center justify-center border border-slate-200 dark:border-slate-700">
-                <i className="fa-solid fa-building text-cyan-600 text-lg"></i>
+            <div key={job.id} className="bg-white dark:bg-slate-900 p-6 rounded-[2.5rem] shadow-sm border border-cyan-50 dark:border-slate-800 flex flex-col gap-4 animate-slideUp" style={{ animationDelay: `${i * 100}ms` }}>
+              <div className="flex gap-4">
+                <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 rounded-xl flex-shrink-0 flex items-center justify-center border border-slate-200 dark:border-slate-700">
+                  <i className="fa-solid fa-building text-cyan-600 text-lg"></i>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex justify-between items-start mb-1">
+                    <h3 className="font-black text-slate-800 dark:text-slate-200 uppercase text-[11px] truncate leading-none">{job.role || job.title}</h3>
+                    <span className="text-[8px] font-black text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-1 rounded-md shrink-0 ml-2">{job.stipend || "TBD"}</span>
+                  </div>
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tight">{job.company || "Details in Doc"}</p>
+                </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex justify-between items-start mb-1">
-                  <h3 className="font-black text-slate-800 dark:text-slate-200 uppercase text-[11px] truncate leading-none">{job.role}</h3>
-                  <span className="text-[8px] font-black text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-1 rounded-md shrink-0 ml-2">{job.stipend}</span>
-                </div>
-                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tight">{job.company}</p>
-                <div className="mt-3 flex items-center justify-between">
-                  <span className="text-[9px] text-slate-400 flex items-center gap-1 font-black uppercase">
-                    <i className="fa-solid fa-location-dot text-cyan-500"></i> {job.location}
+
+              {job.summary && (
+                <p className="text-[9px] text-slate-400 font-medium leading-relaxed italic bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-700">
+                  "{job.summary}"
+                </p>
+              )}
+
+              <div className="flex flex-wrap gap-2">
+                {job.tags?.map((tag: string) => (
+                  <span key={tag} className="text-[7px] font-black uppercase bg-slate-100 dark:bg-slate-800 text-slate-500 px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-700">
+                    {tag}
                   </span>
-                  <button className="text-[8px] font-black uppercase tracking-widest text-white bg-cyan-600 px-4 py-1.5 rounded-xl hover:bg-cyan-700 transition-all shadow-lg shadow-cyan-100 dark:shadow-none">
-                    Apply
+                ))}
+              </div>
+
+              <div className="pt-2 flex items-center justify-between border-t border-slate-50 dark:border-slate-800">
+                <span className="text-[9px] text-slate-400 flex items-center gap-1 font-black uppercase">
+                  <i className="fa-solid fa-location-dot text-cyan-500"></i> {job.location || "On-site"}
+                </span>
+                {job.fileUrl && (
+                  <button 
+                    onClick={() => {
+                      const win = window.open();
+                      win?.document.write(`<iframe src="${job.fileUrl}" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>`);
+                    }}
+                    className="text-[8px] font-black uppercase tracking-widest text-white bg-cyan-600 px-4 py-2 rounded-xl hover:bg-cyan-700 transition-all shadow-lg"
+                  >
+                    View Notice
                   </button>
-                </div>
+                )}
               </div>
             </div>
           ))

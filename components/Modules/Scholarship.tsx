@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { AppData, ScholarshipItem } from '../../types';
 
@@ -51,8 +50,8 @@ const Scholarship: React.FC<ScholarshipProps> = ({ data, onBack }) => {
       <div className="flex justify-between items-center pt-4 border-t border-slate-50 dark:border-slate-800">
         <div className="flex flex-col">
           <span className="text-[9px] text-rose-500 font-black uppercase tracking-tighter">Ends: {s.deadline}</span>
-          {/* Fix: Using s.createdAt as per updated types.ts */}
-          {s.createdAt && <span className="text-[7px] text-slate-400 font-bold uppercase mt-0.5">Posted: {s.createdAt.split(',')[0]}</span>}
+          {/* Fix: Using s.uploadedAt instead of createdAt to match BaseUpload type and add safe split handling */}
+          {s.uploadedAt && <span className="text-[7px] text-slate-400 font-bold uppercase mt-0.5">Posted: {typeof s.uploadedAt === 'string' ? s.uploadedAt.split(',')[0] : 'Recently'}</span>}
         </div>
         <button 
           onClick={() => s.applicationLink ? window.open(s.applicationLink, '_blank') : alert('No link provided for this entry.')}

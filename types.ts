@@ -19,6 +19,9 @@ export interface BaseUpload {
   year: string[];   // ['1st Year', etc]
   fileUrl?: string; // Base64 or URL
   content?: string;
+  summary?: string;
+  tags?: string[];
+  aiProcessed: boolean;
   uploadedAt: any;
   uploadedBy: string;
 }
@@ -40,7 +43,6 @@ export interface ExamNotice extends BaseUpload {
   date?: string;
   time?: string;
   venue?: string;
-  // Added missing division property
   division?: string;
 }
 
@@ -48,11 +50,9 @@ export interface ScholarshipItem extends BaseUpload {
   amount?: string;
   deadline?: string;
   eligibility?: string;
-  // Added missing properties required by Scholarship module
   name?: string;
   sourceType?: string;
   applicationLink?: string;
-  createdAt?: string;
 }
 
 export interface InternshipItem extends BaseUpload {
@@ -60,12 +60,6 @@ export interface InternshipItem extends BaseUpload {
   role?: string;
   location?: string;
   stipend?: string;
-}
-
-export interface EventItem extends BaseUpload {
-  date: string;
-  description: string;
-  venue: string;
 }
 
 export interface Announcement extends BaseUpload {
@@ -95,9 +89,8 @@ export interface AppData {
   exams: ExamNotice[];
   scholarships: ScholarshipItem[];
   internships: InternshipItem[];
-  broadcasts: Announcement[]; // Renamed from announcements
-  // Added missing events property
-  events: EventItem[];
+  broadcasts: Announcement[];
+  events: any[]; 
   complaints: Complaint[];
   rawKnowledge: string[];
   campusMapImage?: string;
