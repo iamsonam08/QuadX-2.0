@@ -1,4 +1,3 @@
-
 export type ModuleType = 
   | 'DASHBOARD'
   | 'VPAI' 
@@ -76,6 +75,14 @@ export interface CampusEvent {
   imageUrl?: string;
 }
 
+export interface Announcement {
+  id: string;
+  title: string;
+  content: string;
+  timestamp: string;
+  priority: 'HIGH' | 'NORMAL';
+}
+
 export interface Complaint {
   id: string;
   text: string;
@@ -98,6 +105,7 @@ export interface AppData {
   scholarships: ScholarshipItem[];
   internships: InternshipItem[];
   events: CampusEvent[];
+  announcements: Announcement[];
   complaints: Complaint[];
   rawKnowledge: string[];
   campusMapImage?: string;

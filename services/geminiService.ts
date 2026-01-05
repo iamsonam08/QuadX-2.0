@@ -2,7 +2,8 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { AppData } from "../types";
 
-const generateId = () => Math.random().toString(36).substr(2, 9);
+// Helper to generate a unique ID for new records
+const generateId = () => Math.random().toString(36).substring(2, 11);
 
 /**
  * Check if the API Key is available
@@ -19,11 +20,12 @@ export async function askVPai(question: string, context: AppData) {
     return "API Key is not configured in your deployment environment variables! 🔑";
   }
 
+  // Create a new GoogleGenAI instance right before making an API call for up-to-date configuration
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: [{ parts: [{ text: question }] }],
+      contents: question,
       config: {
         systemInstruction: `You are VPai, the official AI assistant for QuadX College. 
         KNOWLEDGE BASE: ${JSON.stringify(context)}
@@ -32,6 +34,7 @@ export async function askVPai(question: string, context: AppData) {
       }
     });
 
+    // Access .text property directly (getter)
     return response.text?.trim() || "I'm thinking... but nothing came out. Try again? 🤔";
   } catch (error) {
     console.error("VPai Connection Error:", error);
@@ -135,6 +138,7 @@ export async function extractCategoryData(category: string, content: string, mim
     return [];
   }
 
+  // Fresh instance for every extraction request
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const schema = CATEGORY_SCHEMAS[category];
   
@@ -159,20 +163,23 @@ export async function extractCategoryData(category: string, content: string, mim
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: [{ parts }],
+      contents: { parts },
       config: {
         responseMimeType: "application/json",
         responseSchema: schema,
       },
     });
 
+    // Extract text and sanitize from potential markdown wrappers
     let rawText = response.text || '[]';
-    // Deep clean Markdown
     const sanitizedText = rawText.replace(/```json\n?|```/g, '').trim();
+    if (!sanitizedText) return [];
+    
     const parsed = JSON.parse(sanitizedText);
     
     if (!Array.isArray(parsed)) return [];
 
+    // Assign IDs to extracted items and their nested components
     return parsed.map((item: any) => ({
       ...item,
       id: generateId(),

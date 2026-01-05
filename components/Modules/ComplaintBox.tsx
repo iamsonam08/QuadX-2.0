@@ -1,20 +1,22 @@
-
 import React, { useState } from 'react';
 import { AppData, Complaint } from '../../types';
+import { saveGlobalData } from '../../services/persistenceService';
 
 interface ComplaintBoxProps {
-  setAppData: React.Dispatch<React.SetStateAction<AppData>>;
+  data: AppData;
   onBack: () => void;
 }
 
-const ComplaintBox: React.FC<ComplaintBoxProps> = ({ setAppData, onBack }) => {
+const ComplaintBox: React.FC<ComplaintBoxProps> = ({ data, onBack }) => {
   const [submitted, setSubmitted] = useState(false);
   const [complaintText, setComplaintText] = useState('');
+  const [isSending, setIsSending] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!complaintText.trim()) return;
+    if (!complaintText.trim() || isSending) return;
 
+    setIsSending(true);
     const newComplaint: Complaint = {
       id: Math.random().toString(36).substr(2, 9),
       text: complaintText,
@@ -22,15 +24,23 @@ const ComplaintBox: React.FC<ComplaintBoxProps> = ({ setAppData, onBack }) => {
       status: 'PENDING'
     };
 
-    setAppData(prev => ({
-      ...prev,
-      complaints: [newComplaint, ...prev.complaints]
-    }));
+    // Update cloud data
+    const updatedData = {
+      ...data,
+      complaints: [newComplaint, ...(data.complaints || [])]
+    };
 
-    setSubmitted(true);
-    setTimeout(() => {
-      onBack();
-    }, 2500);
+    const success = await saveGlobalData(updatedData);
+    
+    if (success) {
+      setSubmitted(true);
+      setTimeout(() => {
+        onBack();
+      }, 2500);
+    } else {
+      alert("Failed to connect to campus network. Try again later.");
+      setIsSending(false);
+    }
   };
 
   if (submitted) {
@@ -72,12 +82,17 @@ const ComplaintBox: React.FC<ComplaintBoxProps> = ({ setAppData, onBack }) => {
               rows={6}
               value={complaintText}
               onChange={(e) => setComplaintText(e.target.value)}
+              disabled={isSending}
               className="w-full bg-slate-50 dark:bg-slate-800 rounded-2xl p-4 outline-none focus:ring-2 focus:ring-slate-300 dark:focus:ring-blue-500/30 transition-all border border-slate-100 dark:border-slate-700 dark:text-white"
               placeholder="Type your complaint here..."
             ></textarea>
           </div>
-          <button className="w-full py-4 bg-slate-800 dark:bg-blue-600 text-white rounded-2xl font-bold hover:bg-slate-900 dark:hover:bg-blue-700 transition-all shadow-xl shadow-slate-200 dark:shadow-none">
-            Send Feedback
+          <button 
+            type="submit"
+            disabled={isSending || !complaintText.trim()}
+            className="w-full py-4 bg-slate-800 dark:bg-blue-600 text-white rounded-2xl font-bold hover:bg-slate-900 dark:hover:bg-blue-700 transition-all shadow-xl shadow-slate-200 dark:shadow-none disabled:opacity-50"
+          >
+            {isSending ? "Securely Sending..." : "Send Feedback"}
           </button>
         </form>
       </div>

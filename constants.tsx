@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { AppData } from './types';
 
@@ -9,6 +8,7 @@ export const INITIAL_DATA: AppData = {
   scholarships: [],
   internships: [],
   events: [],
+  announcements: [],
   complaints: [],
   rawKnowledge: [],
   campusMapImage: undefined,

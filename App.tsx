@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { AppData, ModuleType } from './types';
 import { INITIAL_DATA } from './constants';
-import { fetchGlobalData } from './services/persistenceService';
+import { subscribeToGlobalData } from './services/persistenceService';
 import FeatureCard from './components/FeatureCard';
 import VPai from './components/Modules/VPai';
 import Attendance from './components/Modules/Attendance';
@@ -29,14 +28,14 @@ const App: React.FC = () => {
   const logoTaps = useRef<{ count: number; lastTime: number }>({ count: 0, lastTime: 0 });
 
   useEffect(() => {
-    // Fetch Shared Global Data
-    const loadSharedData = async () => {
-      setIsLoading(true);
-      const data = await fetchGlobalData();
+    // Establish Real-Time Connection with Firestore
+    const unsubscribe = subscribeToGlobalData((data) => {
       setAppData(data);
       setIsLoading(false);
-    };
-    loadSharedData();
+    });
+
+    // Cleanup listener on unmount
+    return () => unsubscribe();
   }, []);
 
   useEffect(() => {
@@ -81,7 +80,7 @@ const App: React.FC = () => {
       case 'EXAM_INFO': return <ExamInfo data={appData} onBack={() => setCurrentModule('DASHBOARD')} />;
       case 'SCHOLARSHIP': return <Scholarship data={appData} onBack={() => setCurrentModule('DASHBOARD')} />;
       case 'EVENT_INFO': return <EventInfo data={appData} onBack={() => setCurrentModule('DASHBOARD')} />;
-      case 'COMPLAINT_BOX': return <ComplaintBox setAppData={setAppData} onBack={() => setCurrentModule('DASHBOARD')} />;
+      case 'COMPLAINT_BOX': return <ComplaintBox data={appData} onBack={() => setCurrentModule('DASHBOARD')} />;
       case 'INTERNSHIP': return <Internship data={appData} onBack={() => setCurrentModule('DASHBOARD')} />;
       case 'CAMPUS_MAP': return <CampusMap data={appData} onBack={() => setCurrentModule('DASHBOARD')} />;
       default: return null;
@@ -89,18 +88,18 @@ const App: React.FC = () => {
   };
 
   if (isAdminMode) {
-    return <AdminPanel appData={appData} setAppData={setAppData} onExit={() => setIsAdminMode(false)} />;
+    return <AdminPanel appData={appData} onExit={() => setIsAdminMode(false)} />;
   }
 
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-10 text-center">
         <Logo className="w-32 h-32 mb-8 animate-pulse" />
-        <h2 className="text-xl font-black text-blue-400 uppercase tracking-tighter mb-2">Syncing Campus Intelligence</h2>
+        <h2 className="text-xl font-black text-blue-400 uppercase tracking-tighter mb-2">Establishing Secure Link</h2>
         <div className="w-48 h-1 bg-slate-900 rounded-full overflow-hidden">
           <div className="h-full bg-blue-500 animate-[loading_2s_ease-in-out_infinite]"></div>
         </div>
-        <p className="mt-4 text-[10px] text-slate-500 font-bold uppercase tracking-widest">Connecting to Global QuadX Hub...</p>
+        <p className="mt-4 text-[10px] text-slate-500 font-bold uppercase tracking-widest">Connected to Firebase Real-time Grid...</p>
         <style>{`
           @keyframes loading {
             0% { transform: translateX(-100%); }
@@ -130,7 +129,7 @@ const App: React.FC = () => {
             <div className="flex flex-col">
               <div className="flex items-center gap-2">
                 <h1 className="text-2xl font-black bg-gradient-to-r from-blue-400 to-purple-600 bg-clip-text text-transparent tracking-tighter leading-none">QUADX</h1>
-                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]" title="Connected to Cloud"></div>
+                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]" title="Live Sync Active"></div>
               </div>
               <span className="text-[8px] font-bold text-slate-400 tracking-[0.3em] uppercase opacity-60">Companion</span>
             </div>
@@ -152,7 +151,7 @@ const App: React.FC = () => {
         {currentModule === 'DASHBOARD' && (
           <div className="mb-6 animate-fadeIn px-2">
             <h2 className="text-3xl font-black text-slate-800 dark:text-white tracking-tight">Hi, Student! 👋</h2>
-            <p className="text-slate-500 dark:text-slate-400 font-medium">Synced with Campus Intelligence</p>
+            <p className="text-slate-500 dark:text-slate-400 font-medium">Real-time Campus Intelligence Enabled</p>
           </div>
         )}
       </header>

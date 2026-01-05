@@ -1,6 +1,5 @@
-
 import React, { useState, useRef, useEffect } from 'react';
-import { AppData, TimetableEntry, ExamSchedule, ScholarshipItem, InternshipItem, CampusEvent, Complaint } from '../../types';
+import { AppData, TimetableEntry, ExamSchedule, ScholarshipItem, InternshipItem, CampusEvent, Complaint, Announcement } from '../../types';
 import { extractCategoryData, isApiKeyConfigured } from '../../services/geminiService';
 import { saveGlobalData } from '../../services/persistenceService';
 import Logo from '../Logo';
@@ -8,11 +7,10 @@ import * as XLSX from 'xlsx';
 
 interface AdminPanelProps {
   appData: AppData;
-  setAppData: React.Dispatch<React.SetStateAction<AppData>>;
   onExit: () => void;
 }
 
-type AdminCategory = 'TIMETABLE' | 'SCHOLARSHIP' | 'EVENT' | 'EXAM' | 'INTERNSHIP' | 'CAMPUS_MAP' | 'COMPLAINTS';
+type AdminCategory = 'TIMETABLE' | 'SCHOLARSHIP' | 'EVENT' | 'EXAM' | 'INTERNSHIP' | 'CAMPUS_MAP' | 'COMPLAINTS' | 'ANNOUNCEMENTS';
 
 const CATEGORY_MAP: Record<AdminCategory, { label: string, icon: string, color: string, dataKey: keyof AppData }> = {
   TIMETABLE: { label: 'Timetable', icon: 'fa-calendar-week', color: 'text-indigo-400', dataKey: 'timetable' },
@@ -22,14 +20,13 @@ const CATEGORY_MAP: Record<AdminCategory, { label: string, icon: string, color: 
   INTERNSHIP: { label: 'Internship', icon: 'fa-briefcase', color: 'text-cyan-400', dataKey: 'internships' },
   CAMPUS_MAP: { label: 'Campus Map', icon: 'fa-map-location-dot', color: 'text-lime-400', dataKey: 'rawKnowledge' },
   COMPLAINTS: { label: 'Complaints', icon: 'fa-box-archive', color: 'text-slate-400', dataKey: 'complaints' },
+  ANNOUNCEMENTS: { label: 'Broadcasts', icon: 'fa-bullhorn', color: 'text-orange-400', dataKey: 'announcements' },
 };
 
-const AdminPanel: React.FC<AdminPanelProps> = ({ appData, setAppData, onExit }) => {
+const AdminPanel: React.FC<AdminPanelProps> = ({ appData, onExit }) => {
   const [selectedCategory, setSelectedCategory] = useState<AdminCategory | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
-  const [manualText, setManualText] = useState('');
-  const [editingItem, setEditingItem] = useState<{ id: string, data: any } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [apiOk, setApiOk] = useState(false);
 
@@ -37,23 +34,11 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ appData, setAppData, onExit }) 
     setApiOk(isApiKeyConfigured());
   }, []);
 
-  const handleCloudDeploy = async () => {
-    setIsProcessing(true);
-    setStatusMsg("Broadcasting to All Devices...");
-    const success = await saveGlobalData(appData);
-    if (success) {
-      setStatusMsg("Cloud Sync Complete! ✅");
-    } else {
-      setStatusMsg("Sync Failed. Try Again. ❌");
-    }
-    setTimeout(() => { setIsProcessing(false); setStatusMsg(""); }, 2000);
-  };
-
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !selectedCategory) return;
 
-    if (!apiOk) {
+    if (!apiOk && selectedCategory !== 'CAMPUS_MAP') {
       alert("CRITICAL: API Key is missing. Check Vercel Environment Variables!");
       return;
     }
@@ -72,8 +57,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ appData, setAppData, onExit }) 
       try {
         if (selectedCategory === 'CAMPUS_MAP' && file.type.startsWith('image/')) {
           const base64 = event.target?.result as string;
-          setAppData(prev => ({ ...prev, campusMapImage: base64 }));
-          setStatusMsg('Map visual set locally!');
+          const updated = { ...appData, campusMapImage: base64 };
+          await saveGlobalData(updated);
+          setStatusMsg('Map Updated Globally! 🗺️');
           setIsProcessing(false);
           return;
         }
@@ -91,12 +77,12 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ appData, setAppData, onExit }) 
           content = event.target?.result as string;
         }
 
-        setStatusMsg('AI Analysis Engine...');
+        setStatusMsg('AI Extraction Engine...');
         const extracted = await extractCategoryData(selectedCategory, content, mimeType);
         
         if (extracted && extracted.length > 0) {
-          updateAppData(selectedCategory, extracted);
-          setStatusMsg('Extraction Successful!');
+          await updateAppData(selectedCategory, extracted);
+          setStatusMsg('Cloud Update Successful! 🚀');
         } else {
           setStatusMsg('AI could not find data.');
         }
@@ -118,45 +104,44 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ appData, setAppData, onExit }) 
     }
   };
 
-  const updateAppData = (category: AdminCategory, items: any[]) => {
-    setAppData(prev => {
-      const newData = { ...prev };
-      const key = CATEGORY_MAP[category].dataKey;
-      
-      if (category === 'TIMETABLE') {
-        items.forEach((entry: TimetableEntry) => {
-          const existingIdx = newData.timetable.findIndex(t => 
-            t.day === entry.day && 
-            t.branch === entry.branch && 
-            t.year === entry.year && 
-            t.division === entry.division
-          );
-          if (existingIdx !== -1) {
-            newData.timetable[existingIdx].slots = [...newData.timetable[existingIdx].slots, ...entry.slots];
-          } else {
-            newData.timetable.push(entry);
-          }
-        });
-      } else {
-        (newData[key] as any) = [...(newData[key] as any), ...items];
-      }
-      return newData;
-    });
+  const updateAppData = async (category: AdminCategory, items: any[]) => {
+    const newData = { ...appData };
+    const key = CATEGORY_MAP[category].dataKey;
+    
+    if (category === 'TIMETABLE') {
+      items.forEach((entry: TimetableEntry) => {
+        const existingIdx = newData.timetable.findIndex(t => 
+          t.day === entry.day && 
+          t.branch === entry.branch && 
+          t.year === entry.year && 
+          t.division === entry.division
+        );
+        if (existingIdx !== -1) {
+          newData.timetable[existingIdx].slots = [...newData.timetable[existingIdx].slots, ...entry.slots];
+        } else {
+          newData.timetable.push(entry);
+        }
+      });
+    } else {
+      (newData[key] as any) = [...(newData[key] as any || []), ...items];
+    }
+    
+    // Direct cloud save
+    await saveGlobalData(newData);
   };
 
-  const deleteItem = (id: string) => {
+  const deleteItem = async (id: string) => {
     if (!selectedCategory) return;
     const key = CATEGORY_MAP[selectedCategory].dataKey;
-    setAppData(prev => ({
-      ...prev,
-      [key]: (prev[key] as any[]).filter((item: any) => item.id !== id)
-    }));
+    const newData = {
+      ...appData,
+      [key]: (appData[key] as any[]).filter((item: any) => item.id !== id)
+    };
+    await saveGlobalData(newData);
   };
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col max-w-md mx-auto relative overflow-hidden font-['Outfit']">
-      {/* Edit Modal Logic Remains Same */}
-      
       <header className="p-8 border-b border-slate-900 sticky top-0 bg-slate-950/80 backdrop-blur-xl z-20">
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-4">
@@ -168,9 +153,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ appData, setAppData, onExit }) 
           </button>
         </div>
         
-        {/* API STATUS BAR */}
         <div className={`mt-4 py-1.5 px-4 rounded-full text-[8px] font-black uppercase tracking-widest text-center ${apiOk ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500 animate-pulse'}`}>
-          {apiOk ? "● AI Connected (API Key Found)" : "● AI Disconnected (API Key Missing!)"}
+          {apiOk ? "● Real-time AI Grid Active" : "● AI Link Down (Key Required)"}
         </div>
       </header>
 
@@ -191,8 +175,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ appData, setAppData, onExit }) 
               <div className="w-16 h-16 rounded-2xl bg-blue-600/10 text-blue-500 flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-all">
                 <i className="fa-solid fa-cloud-arrow-up text-3xl"></i>
               </div>
-              <h4 className="text-[11px] font-black text-slate-200 uppercase tracking-widest">Select File to Extract</h4>
-              <p className="text-[8px] text-slate-600 font-black mt-2 uppercase">Excel, PDF, or Images</p>
+              <h4 className="text-[11px] font-black text-slate-200 uppercase tracking-widest">Upload Content</h4>
+              <p className="text-[8px] text-slate-600 font-black mt-2 uppercase">Changes save directly to student devices</p>
             </div>
 
             {isProcessing && (
@@ -203,40 +187,40 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ appData, setAppData, onExit }) 
             )}
 
             <div className="space-y-3">
-              {(appData as any)[CATEGORY_MAP[selectedCategory].dataKey].map((item: any) => (
-                <div key={item.id} className="bg-slate-900 p-5 rounded-[2rem] border border-slate-800 flex justify-between items-center">
+              {(appData[CATEGORY_MAP[selectedCategory].dataKey] as any[] || []).map((item: any) => (
+                <div key={item.id} className="bg-slate-900 p-5 rounded-[2rem] border border-slate-800 flex justify-between items-center animate-fadeIn">
                   <div className="overflow-hidden">
-                    <h5 className="text-[10px] font-black text-slate-200 truncate uppercase">{item.subject || item.name || item.title || item.role || item.day}</h5>
-                    <p className="text-[7px] text-slate-500 font-bold uppercase mt-1">{item.branch || 'General'}</p>
+                    <h5 className="text-[10px] font-black text-slate-200 truncate uppercase">{item.subject || item.name || item.title || item.role || item.day || "Entry"}</h5>
+                    <p className="text-[7px] text-slate-500 font-bold uppercase mt-1">{item.branch || item.category || 'Global'}</p>
                   </div>
                   <button onClick={() => deleteItem(item.id)} className="w-9 h-9 rounded-xl bg-slate-800 text-rose-500 hover:bg-rose-600 hover:text-white transition-all">
                     <i className="fa-solid fa-trash text-[11px]"></i>
                   </button>
                 </div>
               ))}
+              {(appData[CATEGORY_MAP[selectedCategory].dataKey] as any[] || []).length === 0 && (
+                <div className="text-center py-10 opacity-30 italic text-[10px] uppercase tracking-widest font-black">No entries found</div>
+              )}
             </div>
           </div>
         ) : (
-          <div className="space-y-10">
-            <div className="bg-gradient-to-br from-blue-600 to-indigo-800 p-8 rounded-[4rem] relative overflow-hidden group">
+          <div className="space-y-8">
+            <div className="bg-gradient-to-br from-blue-600 to-indigo-800 p-10 rounded-[4rem] relative overflow-hidden group">
               <div className="relative z-10">
-                <p className="text-blue-200 text-[9px] font-black uppercase tracking-widest mb-2">Sync Dashboard</p>
-                <h2 className="text-3xl font-black text-white leading-none tracking-tighter mb-6 uppercase">Global<br/>Sync</h2>
-                <button 
-                  onClick={handleCloudDeploy}
-                  disabled={isProcessing}
-                  className="bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 text-white px-8 py-4 rounded-3xl flex items-center gap-3 transition-all active:scale-95 group/btn"
-                >
-                  <i className={`fa-solid fa-globe group-hover/btn:rotate-12 transition-transform ${isProcessing ? 'animate-spin' : ''}`}></i>
-                  <span className="text-[10px] font-black uppercase tracking-widest">{statusMsg || 'Push to All Computers'}</span>
-                </button>
+                <p className="text-blue-200 text-[9px] font-black uppercase tracking-widest mb-2">Campus Control</p>
+                <h2 className="text-3xl font-black text-white leading-none tracking-tighter mb-4 uppercase">Direct<br/>Persistence</h2>
+                <div className="flex items-center gap-2 text-[9px] font-bold text-emerald-300 uppercase">
+                  <div className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></div>
+                  Real-time synchronization enabled
+                </div>
               </div>
+              <i className="fa-solid fa-bolt absolute -right-4 -bottom-4 text-9xl text-white/5 -rotate-12 group-hover:scale-125 transition-transform"></i>
             </div>
             
             <div className="grid grid-cols-2 gap-4">
               {(Object.keys(CATEGORY_MAP) as AdminCategory[]).map(key => (
                 <button key={key} onClick={() => setSelectedCategory(key)}
-                  className="bg-slate-900 border border-slate-800 p-8 rounded-[3rem] flex flex-col items-center justify-center group hover:border-blue-600 transition-all">
+                  className="bg-slate-900 border border-slate-800 p-8 rounded-[3rem] flex flex-col items-center justify-center group hover:border-blue-600 transition-all active:scale-95">
                   <div className="w-12 h-12 rounded-2xl bg-slate-800 flex items-center justify-center mb-4 group-hover:bg-blue-600 transition-colors">
                     <i className={`fa-solid ${CATEGORY_MAP[key].icon} text-lg ${CATEGORY_MAP[key].color} group-hover:text-white`}></i>
                   </div>
