@@ -144,13 +144,13 @@ const CATEGORY_SCHEMAS: Record<string, any> = {
 /**
  * AI Content Extraction & Categorization with Smart Routing
  */
-export async function extractAndCategorize(content: string, mimeType: string = "text/plain", preferredCategory?: string) {
+export async function extractAndCategorize(content: string, mimeType: string = "text/plain", preferredCategory?: string): Promise<{ category: string, items: any[] } | null> {
   if (!isApiKeyConfigured()) return null;
 
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   // 1. Classification Step - The Smart Router
-  let category = preferredCategory?.toUpperCase();
+  let category: string = (preferredCategory || '').toUpperCase();
   
   if (!category || category === 'DASHBOARD') {
     const classificationPrompt = `
@@ -167,7 +167,7 @@ export async function extractAndCategorize(content: string, mimeType: string = "
         model: 'gemini-3-flash-preview',
         contents: classificationPrompt
       });
-      category = classResponse.text?.trim().toUpperCase();
+      category = (classResponse.text || 'ANNOUNCEMENTS').trim().toUpperCase();
       console.log("Smart Route Classification:", category);
     } catch (e) {
       category = 'ANNOUNCEMENTS';
@@ -176,12 +176,12 @@ export async function extractAndCategorize(content: string, mimeType: string = "
 
   // Sanitize mapping
   if (category === 'SCHOLARSHIPS') category = 'SCHOLARSHIP'; // Unify
-  if (!CATEGORY_SCHEMAS[category!]) {
+  if (!CATEGORY_SCHEMAS[category]) {
     console.warn("Unknown category classified:", category);
     category = 'ANNOUNCEMENTS';
   }
 
-  const schema = CATEGORY_SCHEMAS[category!];
+  const schema = CATEGORY_SCHEMAS[category];
   const extractionPrompt = `
     Extract structured JSON data for ${category} from the input. 
     Follow these rules strictly:

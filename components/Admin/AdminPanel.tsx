@@ -42,30 +42,39 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ appData, onExit }) => {
     setStatusMsg(file ? `Analyzing ${file.name}...` : 'Analyzing Manual Input...');
 
     try {
-      let content = '';
-      let mimeType = 'text/plain';
+      let content: string = '';
+      let mimeType: string = 'text/plain';
 
       if (file) {
         const reader = new FileReader();
-        const fileResult = await new Promise<any>((resolve) => {
-          reader.onload = (e) => resolve(e.target?.result);
+        const fileResult = await new Promise<string | ArrayBuffer | null>((resolve) => {
+          reader.onload = (e) => resolve(e.target?.result || null);
           if (file.name.match(/\.(xlsx|xls|csv)$/)) reader.readAsArrayBuffer(file);
           else if (file.type === 'application/pdf' || file.type.startsWith('image/')) reader.readAsDataURL(file);
           else reader.readAsText(file);
         });
 
         if (file.name.match(/\.(xlsx|xls|csv)$/)) {
-          const data = new Uint8Array(fileResult);
-          const workbook = XLSX.read(data, { type: 'array' });
-          const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
-          content = JSON.stringify(json);
-          mimeType = 'application/json';
-        } else {
+          if (fileResult instanceof ArrayBuffer) {
+            const data = new Uint8Array(fileResult);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+            content = JSON.stringify(json);
+            mimeType = 'application/json';
+          }
+        } else if (typeof fileResult === 'string') {
           content = fileResult;
           mimeType = file.type || 'text/plain';
         }
       } else if (text) {
         content = text;
+      }
+
+      // Ensure content is a valid string before calling AI pipeline
+      if (!content) {
+        setStatusMsg('Invalid input content.');
+        setIsProcessing(false);
+        return;
       }
 
       // CALL THE SINGLE SMART ROUTE PIPELINE
