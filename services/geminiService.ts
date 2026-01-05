@@ -17,10 +17,9 @@ export function isApiKeyConfigured(): boolean {
  */
 export async function askVPai(question: string, context: AppData) {
   if (!isApiKeyConfigured()) {
-    return "API Key is not configured in your deployment environment variables! 🔑";
+    return "API Key is not configured! 🔑";
   }
 
-  // Create a new GoogleGenAI instance right before making an API call for up-to-date configuration
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   try {
     const response = await ai.models.generateContent({
@@ -29,16 +28,14 @@ export async function askVPai(question: string, context: AppData) {
       config: {
         systemInstruction: `You are VPai, the official AI assistant for QuadX College. 
         KNOWLEDGE BASE: ${JSON.stringify(context)}
-        RULES: Be concise (1-2 sentences). Use the base strictly. If info is missing, say "I don't have that info yet! 📚"`,
+        RULES: Be concise. If info is missing, say "I don't have that info yet! 📚"`,
         temperature: 0.4,
       }
     });
-
-    // Access .text property directly (getter)
-    return response.text?.trim() || "I'm thinking... but nothing came out. Try again? 🤔";
+    return response.text?.trim() || "I'm thinking... but nothing came out.";
   } catch (error) {
     console.error("VPai Connection Error:", error);
-    return "I'm having a connection hiccup. Check your API key and internet! ⚡";
+    return "Connection hiccup. Check your API key! ⚡";
   }
 }
 
@@ -77,7 +74,7 @@ const CATEGORY_SCHEMAS: Record<string, any> = {
         amount: { type: Type.STRING },
         deadline: { type: Type.STRING },
         eligibility: { type: Type.STRING },
-        category: { type: Type.STRING }
+        category: { type: Type.STRING, enum: ["GIRLS", "GENERAL"] }
       },
       required: ["name", "amount", "deadline", "eligibility", "category"]
     }
@@ -126,28 +123,44 @@ const CATEGORY_SCHEMAS: Record<string, any> = {
       },
       required: ["company", "role", "location", "stipend", "branch", "year"]
     }
+  },
+  'ANNOUNCEMENT': {
+    type: Type.ARRAY,
+    items: {
+      type: Type.OBJECT,
+      properties: {
+        title: { type: Type.STRING },
+        content: { type: Type.STRING },
+        priority: { type: Type.STRING, enum: ["HIGH", "NORMAL"] }
+      },
+      required: ["title", "content", "priority"]
+    }
   }
 };
 
 /**
- * AI Content Extraction
+ * AI Content Extraction & Categorization
  */
-export async function extractCategoryData(category: string, content: string, mimeType: string = "text/plain") {
-  if (!isApiKeyConfigured()) {
-    console.error("CRITICAL: API_KEY is missing from environment variables.");
-    return [];
+export async function extractAndCategorize(content: string, mimeType: string = "text/plain", preferredCategory?: string) {
+  if (!isApiKeyConfigured()) return null;
+
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  
+  // 1. Classification Step
+  let category = preferredCategory;
+  if (!category) {
+    const classificationResponse = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: `Classify the following content into one of these categories: TIMETABLE, SCHOLARSHIP, EVENT, EXAM, INTERNSHIP, ANNOUNCEMENT. Respond ONLY with the category name.\n\nCONTENT: ${content.substring(0, 1000)}`
+    });
+    category = classificationResponse.text?.trim().toUpperCase() || 'ANNOUNCEMENT';
   }
 
-  // Fresh instance for every extraction request
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const schema = CATEGORY_SCHEMAS[category];
-  
-  if (!schema) return [];
+  // Sanitize category
+  if (!CATEGORY_SCHEMAS[category]) category = 'ANNOUNCEMENT';
 
-  const parts: any[] = [{ text: `Task: Extract structured JSON data for ${category} from input. 
-  Output ONLY a valid JSON array. No conversational text.
-  Branch names: Comp, IT, Civil, Mech, Elect, AIDS, E&TC.
-  Years: 1st Year, 2nd Year, 3rd Year, 4th Year.` }];
+  const schema = CATEGORY_SCHEMAS[category];
+  const parts: any[] = [{ text: `Task: Extract structured JSON data for ${category} from input. Output ONLY a valid JSON array matching the schema.` }];
 
   if (mimeType.startsWith('image/') || mimeType === 'application/pdf') {
     parts.push({
@@ -170,23 +183,17 @@ export async function extractCategoryData(category: string, content: string, mim
       },
     });
 
-    // Extract text and sanitize from potential markdown wrappers
-    let rawText = response.text || '[]';
-    const sanitizedText = rawText.replace(/```json\n?|```/g, '').trim();
-    if (!sanitizedText) return [];
-    
-    const parsed = JSON.parse(sanitizedText);
-    
-    if (!Array.isArray(parsed)) return [];
-
-    // Assign IDs to extracted items and their nested components
-    return parsed.map((item: any) => ({
+    const parsed = JSON.parse(response.text || '[]');
+    const items = parsed.map((item: any) => ({
       ...item,
       id: generateId(),
+      timestamp: new Date().toLocaleString(),
       slots: item.slots ? item.slots.map((s: any) => ({ ...s, id: generateId() })) : undefined
     }));
+
+    return { category, items };
   } catch (error) {
     console.error("AI Extraction Error:", error);
-    return [];
+    return null;
   }
 }
