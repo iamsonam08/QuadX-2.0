@@ -37,90 +37,57 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ appData, onExit }) => {
     setApiOk(isApiKeyConfigured());
   }, []);
 
-  const handleManualSubmit = async () => {
-    if (!manualText.trim()) return;
+  const handleSmartIngest = async (file?: File, text?: string) => {
     setIsProcessing(true);
-    setStatusMsg('AI Processing Manual Input...');
+    setStatusMsg(file ? `Analyzing ${file.name}...` : 'Analyzing Manual Input...');
+
     try {
-      const catToProcess = selectedCategory === 'SCHOLARSHIP' ? 'SCHOLARSHIP' : (selectedCategory === 'ANNOUNCEMENTS' ? 'ANNOUNCEMENT' : (selectedCategory || undefined) as any);
-      const result = await extractAndCategorize(manualText, "text/plain", catToProcess);
-      if (result) {
+      let content = '';
+      let mimeType = 'text/plain';
+
+      if (file) {
+        const reader = new FileReader();
+        const fileResult = await new Promise<any>((resolve) => {
+          reader.onload = (e) => resolve(e.target?.result);
+          if (file.name.match(/\.(xlsx|xls|csv)$/)) reader.readAsArrayBuffer(file);
+          else if (file.type === 'application/pdf' || file.type.startsWith('image/')) reader.readAsDataURL(file);
+          else reader.readAsText(file);
+        });
+
+        if (file.name.match(/\.(xlsx|xls|csv)$/)) {
+          const data = new Uint8Array(fileResult);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+          content = JSON.stringify(json);
+          mimeType = 'application/json';
+        } else {
+          content = fileResult;
+          mimeType = file.type || 'text/plain';
+        }
+      } else if (text) {
+        content = text;
+      }
+
+      // CALL THE SINGLE SMART ROUTE PIPELINE
+      const result = await extractAndCategorize(content, mimeType);
+      
+      if (result && result.items.length > 0) {
+        setStatusMsg(`Detected ${result.category}. Saving ${result.items.length} items...`);
         await saveExtractedItems(result.category, result.items);
-        setStatusMsg('Stored Successfully! 🚀');
+        setStatusMsg(`Success! Routed to ${result.category} 🚀`);
         setManualText('');
       } else {
-        setStatusMsg('AI failed to parse text.');
+        setStatusMsg('AI found no data to route.');
       }
     } catch (err) {
       console.error(err);
-      setStatusMsg('Error processing text.');
+      setStatusMsg('Ingestion Failed. Check console.');
     } finally {
-      setTimeout(() => setIsProcessing(false), 2000);
-    }
-  };
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setIsProcessing(true);
-    setStatusMsg(`Handling ${file.name}...`);
-
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      let content = '';
-      let mimeType = file.type;
-
-      try {
-        if (selectedCategory === 'CAMPUS_MAP' && file.type.startsWith('image/')) {
-          await saveGlobalConfig({ campusMapImage: event.target?.result as string });
-          setStatusMsg('Map Updated Globally! 🗺️');
-          setIsProcessing(false);
-          return;
-        }
-
-        // Handle Excel / CSV parsing specifically for scholarship rows
-        if (file.name.match(/\.(xlsx|xls|csv)$/)) {
-          setStatusMsg('Parsing Spreadsheet Rows...');
-          const data = new Uint8Array(event.target?.result as ArrayBuffer);
-          const workbook = XLSX.read(data, { type: 'array' });
-          const sheetName = workbook.SheetNames[0];
-          const worksheet = workbook.Sheets[sheetName];
-          const json = XLSX.utils.sheet_to_json(worksheet);
-          content = JSON.stringify(json);
-          mimeType = 'application/json';
-        } else if (file.type === 'application/pdf' || file.type.startsWith('image/')) {
-          content = event.target?.result as string;
-          // mimeType remains as is
-        } else {
-          content = event.target?.result as string;
-          mimeType = 'text/plain';
-        }
-
-        const catToProcess = selectedCategory === 'SCHOLARSHIP' ? 'SCHOLARSHIP' : (selectedCategory as any);
-        const result = await extractAndCategorize(content, mimeType, catToProcess);
-        
-        if (result && result.items && result.items.length > 0) {
-          await saveExtractedItems(result.category, result.items);
-          setStatusMsg(`Injected ${result.items.length} items to Cloud! 🚀`);
-        } else {
-          setStatusMsg('AI Extraction found no valid items.');
-        }
-      } catch (err) {
-        console.error(err);
-        setStatusMsg('System error during upload.');
-      } finally {
+      setTimeout(() => {
         setIsProcessing(false);
-        if (fileInputRef.current) fileInputRef.current.value = '';
-      }
-    };
-
-    if (file.name.match(/\.(xlsx|xls|csv)$/)) {
-      reader.readAsArrayBuffer(file);
-    } else if (file.type === 'application/pdf' || file.type.startsWith('image/')) {
-      reader.readAsDataURL(file);
-    } else {
-      reader.readAsText(file);
+        setStatusMsg('');
+      }, 3000);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -173,21 +140,18 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ appData, onExit }) => {
       <div className="space-y-3">
         {items.map((item: any) => (
           <div key={item.id} className="bg-slate-900 p-5 rounded-[2rem] border border-slate-800 flex justify-between items-center group">
-            <div className="overflow-hidden">
+            <div className="overflow-hidden pr-2">
               <h5 className="text-[10px] font-black text-slate-200 truncate uppercase">{item.subject || item.name || item.title || item.role || item.day || "Entry"}</h5>
               <p className="text-[7px] text-slate-500 font-bold uppercase mt-1">
                 {item.branch || item.category || 'Global'} 
-                {item.sourceType && ` • From ${item.sourceType}`}
+                {item.sourceType && ` • ${item.sourceType}`}
               </p>
             </div>
-            <button onClick={() => deleteItemFromCloud(selectedCategory!, item.id)} className="w-9 h-9 rounded-xl bg-slate-800 text-rose-500 hover:bg-rose-600 hover:text-white transition-all">
+            <button onClick={() => deleteItemFromCloud(selectedCategory!, item.id)} className="w-9 h-9 rounded-xl bg-slate-800 text-rose-500 hover:bg-rose-600 hover:text-white transition-all shrink-0">
               <i className="fa-solid fa-trash text-[11px]"></i>
             </button>
           </div>
         ))}
-        {items.length === 0 && !isProcessing && (
-          <div className="text-center py-10 opacity-30 text-[10px] font-black uppercase tracking-widest italic">No Data in Cloud</div>
-        )}
       </div>
     );
   };
@@ -207,6 +171,51 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ appData, onExit }) => {
       </header>
 
       <main className="flex-1 p-6 overflow-y-auto pb-32 custom-scrollbar">
+        {/* SINGLE SMART UPLOAD HUB */}
+        {!selectedCategory && (
+          <div className="mb-10 space-y-6 animate-fadeIn">
+            <div className="bg-gradient-to-br from-blue-600/20 to-purple-600/20 p-8 rounded-[3rem] border border-blue-500/20 shadow-2xl">
+              <h3 className="text-sm font-black text-blue-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                <i className="fa-solid fa-bolt"></i> AI Smart Ingest
+              </h3>
+              
+              <div className="space-y-4">
+                <textarea 
+                  value={manualText}
+                  onChange={(e) => setManualText(e.target.value)}
+                  placeholder="Paste Scholarship list, Timetable text, or Exam dates here..."
+                  className="w-full bg-slate-900/50 rounded-2xl p-4 text-xs outline-none border border-slate-700 focus:border-blue-500 transition-all min-h-[80px]"
+                />
+                
+                <div className="flex gap-2">
+                  <button onClick={() => handleSmartIngest(undefined, manualText)} 
+                    disabled={!manualText.trim() || isProcessing}
+                    className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest disabled:opacity-50">
+                    Process Text
+                  </button>
+                  <button onClick={() => fileInputRef.current?.click()}
+                    disabled={isProcessing}
+                    className="flex-1 py-3 bg-slate-800 text-white rounded-xl font-black text-[10px] uppercase tracking-widest">
+                    Upload File
+                  </button>
+                </div>
+                <input type="file" ref={fileInputRef} className="hidden" onChange={(e) => e.target.files && handleSmartIngest(e.target.files[0])} />
+                
+                <p className="text-[8px] text-slate-500 text-center font-bold uppercase mt-2">
+                  AI will auto-classify & route to Scholarships, Timetable, etc.
+                </p>
+              </div>
+            </div>
+
+            {isProcessing && (
+              <div className="flex items-center justify-center gap-3 py-4 bg-emerald-500/10 rounded-3xl border border-emerald-500/20 animate-pulse">
+                <div className="w-4 h-4 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+                <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">{statusMsg}</span>
+              </div>
+            )}
+          </div>
+        )}
+
         {selectedCategory ? (
           <div className="space-y-6 animate-slideUp">
             <div className="flex items-center justify-between">
@@ -216,37 +225,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ appData, onExit }) => {
               <h3 className="text-lg font-black text-white uppercase tracking-tighter">{CATEGORY_MAP[selectedCategory].label} Controller</h3>
               <div className="w-10"></div>
             </div>
-
-            {selectedCategory !== 'COMPLAINTS' && (
-              <div className="space-y-4">
-                <div className="bg-slate-900 p-6 rounded-[2.5rem] border border-slate-800">
-                  <textarea 
-                    value={manualText}
-                    onChange={(e) => setManualText(e.target.value)}
-                    placeholder={`Type ${CATEGORY_MAP[selectedCategory].label} details manually...`}
-                    className="w-full bg-slate-800/50 rounded-2xl p-4 text-sm outline-none border border-slate-700 focus:border-blue-500 transition-all min-h-[100px]"
-                  />
-                  <button onClick={handleManualSubmit} className="w-full mt-3 py-3 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-700 transition-all">
-                    Inject Manual Entry
-                  </button>
-                </div>
-
-                <div className="bg-slate-900 border-2 border-slate-800 border-dashed rounded-[2.5rem] p-8 text-center cursor-pointer hover:border-blue-500/50 transition-all"
-                     onClick={() => fileInputRef.current?.click()}>
-                  <input type="file" ref={fileInputRef} className="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.png,.jpg,.jpeg,.txt" onChange={handleFileUpload} />
-                  <i className="fa-solid fa-file-arrow-up text-3xl text-blue-500 mb-3"></i>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Upload PDF, Excel, Word or Image</p>
-                  <p className="text-[8px] text-slate-600 mt-2 font-bold uppercase">AI will auto-extract rows and fields</p>
-                </div>
-              </div>
-            )}
-
-            {isProcessing && (
-              <div className="flex items-center justify-center gap-3 py-4 bg-blue-600/10 rounded-3xl border border-blue-500/20">
-                <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest">{statusMsg}</span>
-              </div>
-            )}
 
             {renderContentList()}
           </div>

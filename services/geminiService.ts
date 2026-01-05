@@ -70,14 +70,14 @@ const CATEGORY_SCHEMAS: Record<string, any> = {
     items: {
       type: Type.OBJECT,
       properties: {
-        name: { type: Type.STRING, description: "The name of the scholarship" },
-        amount: { type: Type.STRING, description: "Amount or grant value" },
-        deadline: { type: Type.STRING, description: "Application deadline" },
-        eligibility: { type: Type.STRING, description: "Criteria for eligibility" },
+        name: { type: Type.STRING },
+        amount: { type: Type.STRING },
+        deadline: { type: Type.STRING },
+        eligibility: { type: Type.STRING },
         category: { type: Type.STRING, enum: ["GIRLS", "GENERAL"] },
-        branch: { type: Type.STRING, description: "Applicable branch or 'Global'" },
-        year: { type: Type.STRING, description: "Applicable academic year" },
-        applicationLink: { type: Type.STRING, description: "URL for application if found" }
+        branch: { type: Type.STRING },
+        year: { type: Type.STRING },
+        applicationLink: { type: Type.STRING }
       },
       required: ["name", "amount", "deadline", "eligibility", "category"]
     }
@@ -127,7 +127,7 @@ const CATEGORY_SCHEMAS: Record<string, any> = {
       required: ["company", "role", "location", "stipend", "branch", "year"]
     }
   },
-  'ANNOUNCEMENT': {
+  'ANNOUNCEMENTS': {
     type: Type.ARRAY,
     items: {
       type: Type.OBJECT,
@@ -142,29 +142,57 @@ const CATEGORY_SCHEMAS: Record<string, any> = {
 };
 
 /**
- * AI Content Extraction & Categorization
+ * AI Content Extraction & Categorization with Smart Routing
  */
 export async function extractAndCategorize(content: string, mimeType: string = "text/plain", preferredCategory?: string) {
   if (!isApiKeyConfigured()) return null;
 
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
-  // 1. Classification Step
-  let category = preferredCategory;
-  if (!category) {
-    const classificationResponse = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: `Classify the following content into one of these categories: TIMETABLE, SCHOLARSHIP, EVENT, EXAM, INTERNSHIP, ANNOUNCEMENT. Respond ONLY with the category name.\n\nCONTENT: ${content.substring(0, 1000)}`
-    });
-    category = classificationResponse.text?.trim().toUpperCase() || 'ANNOUNCEMENT';
+  // 1. Classification Step - The Smart Router
+  let category = preferredCategory?.toUpperCase();
+  
+  if (!category || category === 'DASHBOARD') {
+    const classificationPrompt = `
+      Analyze the following college content and classify it into EXACTLY ONE of these categories:
+      TIMETABLE, SCHOLARSHIP, EVENT, EXAM, INTERNSHIP, ANNOUNCEMENTS.
+      Respond ONLY with the category name.
+      
+      CONTENT SAMPLE:
+      ${content.substring(0, 2000)}
+    `;
+    
+    try {
+      const classResponse = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: classificationPrompt
+      });
+      category = classResponse.text?.trim().toUpperCase();
+      console.log("Smart Route Classification:", category);
+    } catch (e) {
+      category = 'ANNOUNCEMENTS';
+    }
   }
 
-  // Sanitize category / Handle plural aliases
-  if (category === 'SCHOLARSHIPS') category = 'SCHOLARSHIP';
-  if (!CATEGORY_SCHEMAS[category]) category = 'ANNOUNCEMENT';
+  // Sanitize mapping
+  if (category === 'SCHOLARSHIPS') category = 'SCHOLARSHIP'; // Unify
+  if (!CATEGORY_SCHEMAS[category!]) {
+    console.warn("Unknown category classified:", category);
+    category = 'ANNOUNCEMENTS';
+  }
 
-  const schema = CATEGORY_SCHEMAS[category];
-  const parts: any[] = [{ text: `Task: Extract structured JSON data for ${category} from input. Output ONLY a valid JSON array matching the schema. For SCHOLARSHIP, if branch or year are not specified, you may omit them or use "Global". Ensure application links are extracted if available.` }];
+  const schema = CATEGORY_SCHEMAS[category!];
+  const extractionPrompt = `
+    Extract structured JSON data for ${category} from the input. 
+    Follow these rules strictly:
+    1. Output ONLY a valid JSON array matching the schema.
+    2. Do NOT include markdown formatting or explanations.
+    3. If data is in a table (like Excel or PDF table), map each row to an object.
+    4. For SCHOLARSHIP, extract 'name', 'amount', 'deadline', 'eligibility', 'category' (GIRLS or GENERAL).
+    5. For TIMETABLE, extract 'day', 'branch', 'year', 'division', and 'slots' (time, subject, room).
+  `;
+
+  const parts: any[] = [{ text: extractionPrompt }];
 
   if (mimeType.startsWith('image/') || mimeType === 'application/pdf') {
     parts.push({
@@ -192,14 +220,14 @@ export async function extractAndCategorize(content: string, mimeType: string = "
       ...item,
       id: generateId(),
       createdAt: new Date().toLocaleString(),
-      sourceType: mimeType === 'application/json' ? 'EXCEL/JSON' : (mimeType.includes('text') ? 'TEXT/MANUAL' : 'DOCUMENT'),
+      sourceType: mimeType === 'application/json' ? 'EXCEL' : (mimeType.includes('text') ? 'MANUAL' : 'DOCUMENT'),
       timestamp: new Date().toLocaleString(),
       slots: item.slots ? item.slots.map((s: any) => ({ ...s, id: generateId() })) : undefined
     }));
 
     return { category, items };
   } catch (error) {
-    console.error("AI Extraction Error:", error);
+    console.error("AI Smart Route Error:", error);
     return null;
   }
 }
