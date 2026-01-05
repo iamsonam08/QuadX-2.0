@@ -18,8 +18,9 @@ const ExamInfo: React.FC<ExamInfoProps> = ({ data, onBack }) => {
 
   const filteredExams = useMemo(() => {
     return data.exams.filter(exam => 
-      exam.branch === selBranch && 
-      exam.year === selYear && 
+      // Fix: Use .includes() for array comparisons
+      exam.branch.includes(selBranch) && 
+      exam.year.includes(selYear) && 
       exam.division === selDiv
     );
   }, [data.exams, selBranch, selYear, selDiv]);

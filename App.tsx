@@ -28,6 +28,7 @@ const App: React.FC = () => {
   const logoTaps = useRef<{ count: number; lastTime: number }>({ count: 0, lastTime: 0 });
 
   useEffect(() => {
+    // Establishing real-time sync with individual collection listeners
     const unsubscribe = subscribeToGlobalData((data) => {
       setAppData(data);
       setIsLoading(false);
@@ -108,26 +109,24 @@ const App: React.FC = () => {
           </button>
         </div>
 
-        {currentModule === 'DASHBOARD' && appData.announcements.length > 0 && (
+        {currentModule === 'DASHBOARD' && appData.broadcasts.length > 0 && (
           <div className="bg-orange-500/10 border border-orange-500/20 rounded-2xl p-4 mb-6 flex items-center gap-4 animate-fadeIn">
             <div className="w-10 h-10 bg-orange-500 text-white rounded-xl flex items-center justify-center flex-shrink-0 animate-pulse">
               <i className="fa-solid fa-bullhorn"></i>
             </div>
             <div className="flex-1 overflow-hidden">
-              <p className="text-[10px] font-black text-orange-600 uppercase tracking-widest">New Document Uploaded</p>
+              <p className="text-[10px] font-black text-orange-600 uppercase tracking-widest">Global Broadcast</p>
               <p className="text-[11px] font-bold text-slate-700 dark:text-slate-300 truncate">
-                {appData.announcements[0].title || appData.announcements[0].originalFileName}
+                {appData.broadcasts[0].title || "Recent Update"}
               </p>
             </div>
-            {appData.announcements[0].rawContent && (
+            {appData.broadcasts[0].fileUrl && (
                <button 
                 onClick={() => {
-                  const content = appData.announcements[0].rawContent;
+                  const content = appData.broadcasts[0].fileUrl;
                   if (content?.startsWith('data:')) {
                     const win = window.open();
                     win?.document.write(`<iframe src="${content}" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>`);
-                  } else {
-                    alert(content);
                   }
                 }}
                 className="text-orange-600 font-black text-[9px] uppercase border-b border-orange-600"

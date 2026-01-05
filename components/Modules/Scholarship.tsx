@@ -17,8 +17,9 @@ const Scholarship: React.FC<ScholarshipProps> = ({ data, onBack }) => {
   // Filtering architecture copied from Timetable module
   const filteredScholarships = useMemo(() => {
     return data.scholarships.filter(s => {
-      const branchMatch = selBranch === 'Global' || !s.branch || s.branch === selBranch;
-      const yearMatch = selYear === 'All Years' || !s.year || s.year === selYear;
+      // Fix: Use .includes() for array comparisons
+      const branchMatch = selBranch === 'Global' || !s.branch || s.branch.includes(selBranch);
+      const yearMatch = selYear === 'All Years' || !s.year || s.year.includes(selYear);
       return branchMatch && yearMatch;
     });
   }, [data.scholarships, selBranch, selYear]);
@@ -37,7 +38,8 @@ const Scholarship: React.FC<ScholarshipProps> = ({ data, onBack }) => {
           <div className="text-base font-black text-amber-600">{s.amount}</div>
         </div>
       </div>
-      <h3 className="text-sm font-black text-slate-800 dark:text-slate-200 mb-1 leading-tight">{s.name}</h3>
+      {/* Fix: Using s.name as per updated types.ts or fallback to title */}
+      <h3 className="text-sm font-black text-slate-800 dark:text-slate-200 mb-1 leading-tight">{s.name || s.title}</h3>
       <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tight mb-2">{s.eligibility}</p>
       
       <div className="flex flex-wrap gap-2 mb-4">
@@ -49,6 +51,7 @@ const Scholarship: React.FC<ScholarshipProps> = ({ data, onBack }) => {
       <div className="flex justify-between items-center pt-4 border-t border-slate-50 dark:border-slate-800">
         <div className="flex flex-col">
           <span className="text-[9px] text-rose-500 font-black uppercase tracking-tighter">Ends: {s.deadline}</span>
+          {/* Fix: Using s.createdAt as per updated types.ts */}
           {s.createdAt && <span className="text-[7px] text-slate-400 font-bold uppercase mt-0.5">Posted: {s.createdAt.split(',')[0]}</span>}
         </div>
         <button 

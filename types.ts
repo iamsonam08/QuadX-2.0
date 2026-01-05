@@ -11,21 +11,20 @@ export type ModuleType =
   | 'INTERNSHIP' 
   | 'CAMPUS_MAP';
 
-export interface AttendanceRecord {
+export interface BaseUpload {
   id: string;
-  subject: string;
-  percentage: number;
-  totalClasses: number;
-  attendedClasses: number;
-  branch: string;
-  year: string;
+  title: string;
+  category: string;
+  branch: string[]; // ['Comp', 'IT', etc]
+  year: string[];   // ['1st Year', etc]
+  fileUrl?: string; // Base64 or URL
+  content?: string;
+  uploadedAt: any;
+  uploadedBy: string;
 }
 
-export interface TimetableEntry {
-  id: string;
+export interface TimetableEntry extends BaseUpload {
   day: string;
-  branch: string;
-  year: string;
   division: string;
   slots: {
     id: string;
@@ -36,62 +35,51 @@ export interface TimetableEntry {
   }[];
 }
 
-export interface ExamSchedule {
+export interface ExamNotice extends BaseUpload {
+  subject?: string;
+  date?: string;
+  time?: string;
+  venue?: string;
+  // Added missing division property
+  division?: string;
+}
+
+export interface ScholarshipItem extends BaseUpload {
+  amount?: string;
+  deadline?: string;
+  eligibility?: string;
+  // Added missing properties required by Scholarship module
+  name?: string;
+  sourceType?: string;
+  applicationLink?: string;
+  createdAt?: string;
+}
+
+export interface InternshipItem extends BaseUpload {
+  company?: string;
+  role?: string;
+  location?: string;
+  stipend?: string;
+}
+
+export interface EventItem extends BaseUpload {
+  date: string;
+  description: string;
+  venue: string;
+}
+
+export interface Announcement extends BaseUpload {
+  priority: 'HIGH' | 'NORMAL';
+}
+
+export interface AttendanceRecord {
   id: string;
   subject: string;
-  date: string;
-  time: string;
-  venue: string;
+  percentage: number;
+  totalClasses: number;
+  attendedClasses: number;
   branch: string;
   year: string;
-  division: string;
-}
-
-export interface ScholarshipItem {
-  id: string;
-  name: string;
-  amount: string;
-  deadline: string;
-  eligibility: string;
-  category: 'GIRLS' | 'GENERAL';
-  branch?: string;
-  year?: string;
-  applicationLink?: string;
-  sourceType?: string;
-  createdAt?: string;
-  originalFileName?: string;
-  rawContent?: string;
-}
-
-export interface InternshipItem {
-  id: string;
-  company: string;
-  role: string;
-  location: string;
-  stipend: string;
-  branch: string;
-  year: string;
-}
-
-export interface CampusEvent {
-  id: string;
-  title: string;
-  date: string;
-  venue: string;
-  description: string;
-  category: 'Comp' | 'IT' | 'Civil' | 'Mech' | 'Elect' | 'AIDS' | 'E&TC' | 'General';
-  imageUrl?: string;
-}
-
-export interface Announcement {
-  id: string;
-  title: string;
-  content: string;
-  timestamp: string;
-  priority: 'HIGH' | 'NORMAL';
-  originalFileName?: string;
-  mimeType?: string;
-  rawContent?: string; // Base64 or raw text fallback
 }
 
 export interface Complaint {
@@ -101,24 +89,16 @@ export interface Complaint {
   status: 'PENDING' | 'RESOLVED';
 }
 
-export interface UploadLog {
-  id: string;
-  fileName: string;
-  type: string;
-  timestamp: string;
-  status: 'SUCCESS' | 'PARTIAL' | 'FAILED';
-}
-
 export interface AppData {
   attendance: AttendanceRecord[];
   timetable: TimetableEntry[];
-  exams: ExamSchedule[];
+  exams: ExamNotice[];
   scholarships: ScholarshipItem[];
   internships: InternshipItem[];
-  events: CampusEvent[];
-  announcements: Announcement[];
+  broadcasts: Announcement[]; // Renamed from announcements
+  // Added missing events property
+  events: EventItem[];
   complaints: Complaint[];
   rawKnowledge: string[];
   campusMapImage?: string;
-  uploadLogs: UploadLog[];
 }

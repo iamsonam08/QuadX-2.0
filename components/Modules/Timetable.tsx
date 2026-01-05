@@ -21,8 +21,9 @@ const Timetable: React.FC<TimetableProps> = ({ data, onBack }) => {
   const currentSlots = useMemo(() => {
     return data.timetable.find(t => 
       t.day === activeDay && 
-      t.branch === selBranch && 
-      t.year === selYear && 
+      // Fix: Use .includes() for array comparisons
+      t.branch.includes(selBranch) && 
+      t.year.includes(selYear) && 
       t.division === selDiv
     )?.slots || [];
   }, [data.timetable, activeDay, selBranch, selYear, selDiv]);

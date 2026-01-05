@@ -1,7 +1,8 @@
 
 import React, { useState } from 'react';
 import { AppData, Complaint } from '../../types';
-import { saveExtractedItems } from '../../services/persistenceService';
+// Fix: Use saveCategorizedItems instead of non-existent saveExtractedItems
+import { saveCategorizedItems } from '../../services/persistenceService';
 
 interface ComplaintBoxProps {
   data: AppData;
@@ -27,7 +28,8 @@ const ComplaintBox: React.FC<ComplaintBoxProps> = ({ data, onBack }) => {
 
     try {
       // Direct save to "complaints" collection
-      await saveExtractedItems('COMPLAINTS', [newComplaint]);
+      // Fix: Use saveCategorizedItems
+      await saveCategorizedItems('complaints', [newComplaint]);
       setSubmitted(true);
       setTimeout(() => {
         onBack();

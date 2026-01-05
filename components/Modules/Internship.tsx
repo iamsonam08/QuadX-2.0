@@ -16,7 +16,8 @@ const Internship: React.FC<InternshipProps> = ({ data, onBack }) => {
 
   const filteredInternships = useMemo(() => {
     return data.internships.filter(job => 
-      job.branch === selBranch && job.year === selYear
+      // Fix: Use .includes() for array comparisons
+      job.branch.includes(selBranch) && job.year.includes(selYear)
     );
   }, [data.internships, selBranch, selYear]);
 
