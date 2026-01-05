@@ -42,7 +42,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ appData, onExit }) => {
     setIsProcessing(true);
     setStatusMsg('AI Processing Manual Input...');
     try {
-      const result = await extractAndCategorize(manualText, "text/plain", selectedCategory === 'ANNOUNCEMENTS' ? 'ANNOUNCEMENT' : (selectedCategory || undefined) as any);
+      const catToProcess = selectedCategory === 'SCHOLARSHIP' ? 'SCHOLARSHIP' : (selectedCategory === 'ANNOUNCEMENTS' ? 'ANNOUNCEMENT' : (selectedCategory || undefined) as any);
+      const result = await extractAndCategorize(manualText, "text/plain", catToProcess);
       if (result) {
         await saveExtractedItems(result.category, result.items);
         setStatusMsg('Stored Successfully! 🚀');
@@ -51,6 +52,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ appData, onExit }) => {
         setStatusMsg('AI failed to parse text.');
       }
     } catch (err) {
+      console.error(err);
       setStatusMsg('Error processing text.');
     } finally {
       setTimeout(() => setIsProcessing(false), 2000);
@@ -73,35 +75,53 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ appData, onExit }) => {
         if (selectedCategory === 'CAMPUS_MAP' && file.type.startsWith('image/')) {
           await saveGlobalConfig({ campusMapImage: event.target?.result as string });
           setStatusMsg('Map Updated Globally! 🗺️');
+          setIsProcessing(false);
           return;
         }
 
-        if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls') || file.name.endsWith('.csv')) {
-          const workbook = XLSX.read(event.target?.result, { type: 'array' });
-          content = JSON.stringify(XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]));
+        // Handle Excel / CSV parsing specifically for scholarship rows
+        if (file.name.match(/\.(xlsx|xls|csv)$/)) {
+          setStatusMsg('Parsing Spreadsheet Rows...');
+          const data = new Uint8Array(event.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const sheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[sheetName];
+          const json = XLSX.utils.sheet_to_json(worksheet);
+          content = JSON.stringify(json);
           mimeType = 'application/json';
+        } else if (file.type === 'application/pdf' || file.type.startsWith('image/')) {
+          content = event.target?.result as string;
+          // mimeType remains as is
         } else {
           content = event.target?.result as string;
+          mimeType = 'text/plain';
         }
 
-        const result = await extractAndCategorize(content, mimeType, selectedCategory as any);
-        if (result) {
+        const catToProcess = selectedCategory === 'SCHOLARSHIP' ? 'SCHOLARSHIP' : (selectedCategory as any);
+        const result = await extractAndCategorize(content, mimeType, catToProcess);
+        
+        if (result && result.items && result.items.length > 0) {
           await saveExtractedItems(result.category, result.items);
-          setStatusMsg('Cloud Sync Complete! 🚀');
+          setStatusMsg(`Injected ${result.items.length} items to Cloud! 🚀`);
         } else {
-          setStatusMsg('Extraction failed.');
+          setStatusMsg('AI Extraction found no valid items.');
         }
       } catch (err) {
-        setStatusMsg('System error.');
+        console.error(err);
+        setStatusMsg('System error during upload.');
       } finally {
         setIsProcessing(false);
         if (fileInputRef.current) fileInputRef.current.value = '';
       }
     };
 
-    if (file.name.match(/\.(xlsx|xls|csv)$/)) reader.readAsArrayBuffer(file);
-    else if (file.type === 'application/pdf' || file.type.startsWith('image/')) reader.readAsDataURL(file);
-    else reader.readAsText(file);
+    if (file.name.match(/\.(xlsx|xls|csv)$/)) {
+      reader.readAsArrayBuffer(file);
+    } else if (file.type === 'application/pdf' || file.type.startsWith('image/')) {
+      reader.readAsDataURL(file);
+    } else {
+      reader.readAsText(file);
+    }
   };
 
   const renderContentList = () => {
@@ -155,13 +175,19 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ appData, onExit }) => {
           <div key={item.id} className="bg-slate-900 p-5 rounded-[2rem] border border-slate-800 flex justify-between items-center group">
             <div className="overflow-hidden">
               <h5 className="text-[10px] font-black text-slate-200 truncate uppercase">{item.subject || item.name || item.title || item.role || item.day || "Entry"}</h5>
-              <p className="text-[7px] text-slate-500 font-bold uppercase mt-1">{item.branch || item.category || 'Global'}</p>
+              <p className="text-[7px] text-slate-500 font-bold uppercase mt-1">
+                {item.branch || item.category || 'Global'} 
+                {item.sourceType && ` • From ${item.sourceType}`}
+              </p>
             </div>
             <button onClick={() => deleteItemFromCloud(selectedCategory!, item.id)} className="w-9 h-9 rounded-xl bg-slate-800 text-rose-500 hover:bg-rose-600 hover:text-white transition-all">
               <i className="fa-solid fa-trash text-[11px]"></i>
             </button>
           </div>
         ))}
+        {items.length === 0 && !isProcessing && (
+          <div className="text-center py-10 opacity-30 text-[10px] font-black uppercase tracking-widest italic">No Data in Cloud</div>
+        )}
       </div>
     );
   };
@@ -197,19 +223,20 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ appData, onExit }) => {
                   <textarea 
                     value={manualText}
                     onChange={(e) => setManualText(e.target.value)}
-                    placeholder="Type manually or paste content here..."
+                    placeholder={`Type ${CATEGORY_MAP[selectedCategory].label} details manually...`}
                     className="w-full bg-slate-800/50 rounded-2xl p-4 text-sm outline-none border border-slate-700 focus:border-blue-500 transition-all min-h-[100px]"
                   />
                   <button onClick={handleManualSubmit} className="w-full mt-3 py-3 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-700 transition-all">
-                    Process Manual Input
+                    Inject Manual Entry
                   </button>
                 </div>
 
                 <div className="bg-slate-900 border-2 border-slate-800 border-dashed rounded-[2.5rem] p-8 text-center cursor-pointer hover:border-blue-500/50 transition-all"
                      onClick={() => fileInputRef.current?.click()}>
-                  <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileUpload} />
+                  <input type="file" ref={fileInputRef} className="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.png,.jpg,.jpeg,.txt" onChange={handleFileUpload} />
                   <i className="fa-solid fa-file-arrow-up text-3xl text-blue-500 mb-3"></i>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Upload Document / Image</p>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Upload PDF, Excel, Word or Image</p>
+                  <p className="text-[8px] text-slate-600 mt-2 font-bold uppercase">AI will auto-extract rows and fields</p>
                 </div>
               </div>
             )}

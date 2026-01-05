@@ -70,13 +70,14 @@ const CATEGORY_SCHEMAS: Record<string, any> = {
     items: {
       type: Type.OBJECT,
       properties: {
-        name: { type: Type.STRING },
-        amount: { type: Type.STRING },
-        deadline: { type: Type.STRING },
-        eligibility: { type: Type.STRING },
+        name: { type: Type.STRING, description: "The name of the scholarship" },
+        amount: { type: Type.STRING, description: "Amount or grant value" },
+        deadline: { type: Type.STRING, description: "Application deadline" },
+        eligibility: { type: Type.STRING, description: "Criteria for eligibility" },
         category: { type: Type.STRING, enum: ["GIRLS", "GENERAL"] },
-        branch: { type: Type.STRING },
-        year: { type: Type.STRING }
+        branch: { type: Type.STRING, description: "Applicable branch or 'Global'" },
+        year: { type: Type.STRING, description: "Applicable academic year" },
+        applicationLink: { type: Type.STRING, description: "URL for application if found" }
       },
       required: ["name", "amount", "deadline", "eligibility", "category"]
     }
@@ -163,7 +164,7 @@ export async function extractAndCategorize(content: string, mimeType: string = "
   if (!CATEGORY_SCHEMAS[category]) category = 'ANNOUNCEMENT';
 
   const schema = CATEGORY_SCHEMAS[category];
-  const parts: any[] = [{ text: `Task: Extract structured JSON data for ${category} from input. Output ONLY a valid JSON array matching the schema. For SCHOLARSHIP, if branch or year are not specified, you may omit them or use "Global".` }];
+  const parts: any[] = [{ text: `Task: Extract structured JSON data for ${category} from input. Output ONLY a valid JSON array matching the schema. For SCHOLARSHIP, if branch or year are not specified, you may omit them or use "Global". Ensure application links are extracted if available.` }];
 
   if (mimeType.startsWith('image/') || mimeType === 'application/pdf') {
     parts.push({
@@ -190,6 +191,8 @@ export async function extractAndCategorize(content: string, mimeType: string = "
     const items = parsed.map((item: any) => ({
       ...item,
       id: generateId(),
+      createdAt: new Date().toLocaleString(),
+      sourceType: mimeType === 'application/json' ? 'EXCEL/JSON' : (mimeType.includes('text') ? 'TEXT/MANUAL' : 'DOCUMENT'),
       timestamp: new Date().toLocaleString(),
       slots: item.slots ? item.slots.map((s: any) => ({ ...s, id: generateId() })) : undefined
     }));

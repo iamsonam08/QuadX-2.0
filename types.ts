@@ -56,6 +56,9 @@ export interface ScholarshipItem {
   category: 'GIRLS' | 'GENERAL';
   branch?: string;
   year?: string;
+  applicationLink?: string;
+  sourceType?: string;
+  createdAt?: string;
 }
 
 export interface InternshipItem {

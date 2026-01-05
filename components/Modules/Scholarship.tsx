@@ -40,17 +40,22 @@ const Scholarship: React.FC<ScholarshipProps> = ({ data, onBack }) => {
       <h3 className="text-sm font-black text-slate-800 dark:text-slate-200 mb-1 leading-tight">{s.name}</h3>
       <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tight mb-2">{s.eligibility}</p>
       
-      {(s.branch || s.year) && (
-        <div className="flex gap-2 mb-4">
-          {s.branch && <span className="text-[7px] font-black uppercase px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-full">{s.branch}</span>}
-          {s.year && <span className="text-[7px] font-black uppercase px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-full">{s.year}</span>}
-        </div>
-      )}
+      <div className="flex flex-wrap gap-2 mb-4">
+        <span className="text-[7px] font-black uppercase px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-full">{s.branch || 'Global'}</span>
+        <span className="text-[7px] font-black uppercase px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-full">{s.year || 'All Years'}</span>
+        {s.sourceType && <span className="text-[7px] font-black uppercase px-2 py-0.5 bg-blue-50 dark:bg-blue-900/20 text-blue-500 rounded-full">{s.sourceType}</span>}
+      </div>
 
       <div className="flex justify-between items-center pt-4 border-t border-slate-50 dark:border-slate-800">
-        <span className="text-[9px] text-rose-500 font-black uppercase tracking-tighter">Ends: {s.deadline}</span>
-        <button className="bg-amber-500 text-white px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-amber-600 transition-all">
-          Apply
+        <div className="flex flex-col">
+          <span className="text-[9px] text-rose-500 font-black uppercase tracking-tighter">Ends: {s.deadline}</span>
+          {s.createdAt && <span className="text-[7px] text-slate-400 font-bold uppercase mt-0.5">Posted: {s.createdAt.split(',')[0]}</span>}
+        </div>
+        <button 
+          onClick={() => s.applicationLink ? window.open(s.applicationLink, '_blank') : alert('No link provided for this entry.')}
+          className="bg-amber-500 text-white px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-amber-600 transition-all"
+        >
+          {s.applicationLink ? 'Apply Now' : 'Details'}
         </button>
       </div>
     </div>
